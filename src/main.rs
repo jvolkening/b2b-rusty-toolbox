@@ -5,15 +5,16 @@ use std::process;
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
 
-    let k: usize = if args.len() < 2 {
-        3
-    } else {
-        match args[1].parse::<usize>() {
-            Ok(val) if val > 0 => val,
-            _ => {
-                eprintln!("Error: 'k' must be a positive integer greater than 0.");
-                process::exit(1);
-            }
+    if args.len() < 2 {
+        eprintln!("Error: Missing required argument 'k'.");
+        process::exit(1);
+    }
+
+    let k: usize = match args[1].parse::<usize>() {
+        Ok(val) if val > 0 => val,
+        _ => {
+            eprintln!("Error: 'k' must be a positive integer greater than 0.");
+            process::exit(1);
         }
     };
 
@@ -50,8 +51,6 @@ fn main() -> io::Result<()> {
             let data_len = seq_data.len();
 
             while idx < data_len {
-                // FIX: Check if we are sitting exactly on a k-boundary interval 
-                // from a previous chunk iteration or a previous line block
                 if current_pos == k {
                     writer.write_all(b"N")?;
                     current_pos = 0;
