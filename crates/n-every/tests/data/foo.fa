@@ -1,0 +1,9 @@
+>seq1 with description
+ATTAGACCAGACTTAC
+>seq5 exactly K in length
+ATTGG
+>seq4 unequal line lengths
+ATTAGACCAGACTTAC
+GAAATTAGACCAGACTTAC
+TTAGACCAGACTTAC
+ATTAGACCAGACTTAC
