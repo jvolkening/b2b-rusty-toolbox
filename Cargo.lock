@@ -3,5 +3,9 @@
 version = 4
 
 [[package]]
+name = "bg-window"
+version = "0.1.0"
+
+[[package]]
 name = "n-every"
 version = "0.1.0"
