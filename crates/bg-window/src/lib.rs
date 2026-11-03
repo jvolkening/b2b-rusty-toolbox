@@ -128,8 +128,8 @@ fn summarize(segs: &mut [(f64, u64)], stat: Stat) -> f64 {
 }
 
 /// Summarizes `dense` (tiling of [0, len)) in consecutive windows of size `w`,
-/// optionally merging adjacent windows with identical values.
-fn window_pass(dense: &[Interval], len: u64, w: u64, stat: Stat, merge: bool) -> Vec<Interval> {
+/// merging adjacent windows with identical values.
+fn window_pass(dense: &[Interval], len: u64, w: u64, stat: Stat) -> Vec<Interval> {
     let mut out: Vec<Interval> = Vec::new();
     let mut idx = 0;
     let mut start = 0;
@@ -149,7 +149,7 @@ fn window_pass(dense: &[Interval], len: u64, w: u64, stat: Stat, merge: bool) ->
         }
         let val = summarize(&mut segs, stat);
         match out.last_mut() {
-            Some(last) if merge && last.2 == val => last.1 = end,
+            Some(last) if last.2 == val => last.1 = end,
             _ => out.push((start, end, val)),
         }
         start = end;
@@ -165,7 +165,6 @@ pub fn adaptive_windows(
     min: usize,
     max: usize,
     stat: Stat,
-    merge: bool,
 ) -> Vec<Interval> {
     if len == 0 {
         return Vec::new();
@@ -176,10 +175,16 @@ pub fn adaptive_windows(
     let mut seen = HashSet::new();
     let mut best: Option<(usize, Vec<Interval>)> = None;
     for _ in 0..64 {
+        if seen.contains(&w) {
+            let Some(next) = (1..=len).find(|candidate| !seen.contains(candidate)) else {
+                break;
+            };
+            w = next;
+        }
         if !seen.insert(w) {
             break;
         }
-        let res = window_pass(&d, len, w, stat, merge);
+        let res = window_pass(&d, len, w, stat);
         let n = res.len();
         let dist = if n < min { min - n } else { n.saturating_sub(max) };
         if dist == 0 {
@@ -203,7 +208,6 @@ pub fn run<W: Write>(
     min: usize,
     max: usize,
     stat: Stat,
-    merge: bool,
     mut out: W,
 ) -> io::Result<()> {
     let known: HashSet<&str> = fasta.iter().map(|f| f.0.as_str()).collect();
@@ -217,7 +221,7 @@ pub fn run<W: Write>(
                 return Err(err(format!("Bedgraph interval exceeds length of '{name}'")));
             }
         }
-        for (s, e, v) in adaptive_windows(iv, *len, min, max, stat, merge) {
+        for (s, e, v) in adaptive_windows(iv, *len, min, max, stat) {
             writeln!(out, "{name}\t{s}\t{e}\t{v}")?;
         }
     }

@@ -15,7 +15,6 @@ OPTIONS:
     -n, --min-entries <N>    Minimum entries per sequence in output
     -N, --max-entries <M>    Maximum entries per sequence in output
     -s, --stat <STAT>        min, max, median, mean, sum [default: mean]
-        --no-merge           Do not merge adjacent windows with identical values
     -o, --output <FILE>      Output file [default: stdout]
     -h, --help               Print this help message
 
@@ -43,15 +42,10 @@ fn main() -> io::Result<()> {
     let mut args = std::env::args().skip(1);
     let (mut bg, mut fa, mut min, mut max, mut out) = (None, None, None, None, None);
     let mut stat = Stat::Mean;
-    let mut merge = true;
     while let Some(a) = args.next() {
         if a == "-h" || a == "--help" {
             print!("{USAGE}");
             return Ok(());
-        }
-        if a == "--no-merge" {
-            merge = false;
-            continue;
         }
         let v = args.next().unwrap_or_else(|| die(&format!("missing value for {a}")));
         let num = |v: &str| v.parse::<usize>().ok().filter(|n| *n > 0)
@@ -81,7 +75,7 @@ fn main() -> io::Result<()> {
         None => Box::new(io::stdout().lock()),
     };
     let mut w = BufWriter::with_capacity(256 * 1024, w);
-    if let Err(e) = run(&fasta, &bedgraph, min, max, stat, merge, &mut w) {
+    if let Err(e) = run(&fasta, &bedgraph, min, max, stat, &mut w) {
         eprintln!("Error: {e}");
         process::exit(1);
     }
