@@ -1,0 +1,8 @@
+[package]
+name = "mega-blastn"
+version.workspace = true
+edition.workspace = true
+description = "Memory-mapped, streaming megablast-style nucleotide search against NCBI BLAST v4/v5 databases"
+
+[dependencies]
+memmap2 = "0.9"
