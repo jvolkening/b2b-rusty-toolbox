@@ -8,3 +8,4 @@ More documentation may come at some point. For now, consider this a personal Rus
 
 - `n-every`: insert an `N` after every K bases in FASTA input.
 - `bg-window`: shrink a bedgraph using a per-sequence adaptive sliding window (min/max/median/mean/sum) so each sequence yields a user-specified range of entries. See `bg-window --help`.
+- `viral-unitig`: experimental coverage-aware unitigger for metagenomic reads. See [its documentation](crates/viral-unitig/README.md) for limitations.

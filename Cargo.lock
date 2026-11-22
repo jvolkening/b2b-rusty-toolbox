@@ -9,3 +9,7 @@ version = "0.1.0"
 [[package]]
 name = "n-every"
 version = "0.1.0"
+
+[[package]]
+name = "viral-unitig"
+version = "0.1.0"
