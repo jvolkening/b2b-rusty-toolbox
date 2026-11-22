@@ -19,3 +19,5 @@ More documentation may come at some point. For now, consider this a personal Rus
   ```
 
   Input can also be piped on stdin or supplied as multiple plain or gzip-compressed files of the same format. FASTQ must use four lines per record; output preserves the input record format, headers, sequences, and qualities. Reads are processed in bounded batches in input order; `--threads` controls worker count (by default, available CPUs up to 8). Building requires a C compiler and zlib development libraries.
+
+  Use `--log summary.tsv` to write a two-line tab-delimited summary after successful processing. Its columns are `n_total`, `n_kept`, and `fraction` (reads written divided by reads consumed, or 0.0 for empty input). Counts include all input files and reflect the selected output mode. The log file must not already exist, to avoid overwriting input or other files.

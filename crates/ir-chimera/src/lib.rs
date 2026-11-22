@@ -6,6 +6,12 @@ use std::io::{BufRead, Write};
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 
+#[derive(Default)]
+pub struct Counts {
+    pub n_total: u64,
+    pub n_kept: u64,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Options {
     pub min_length: usize,
@@ -227,6 +233,7 @@ fn write_batch<W: Write>(
     writer: &mut W,
     options: Options,
     pool: &rayon::ThreadPool,
+    counts: &mut Counts,
 ) -> Result<()> {
     let results: Vec<_> = pool.install(|| {
         batch
@@ -240,6 +247,7 @@ fn write_batch<W: Write>(
         if chimeric == options.chimeric {
             writer.write_all(&record.raw)?;
             writer.write_all(b"\n")?;
+            counts.n_kept += 1;
         }
     }
     batch.clear();
@@ -252,6 +260,7 @@ pub fn filter<R: BufRead + Send, W: Write>(
     options: Options,
     pool: &rayon::ThreadPool,
     format: &mut Option<needletail::parser::Format>,
+    counts: &mut Counts,
 ) -> Result<()> {
     if reader.fill_buf()?.is_empty() {
         return Ok(());
@@ -266,6 +275,7 @@ pub fn filter<R: BufRead + Send, W: Write>(
             return Err("cannot mix FASTA and FASTQ input files".into());
         }
         *format = Some(record.format());
+        counts.n_total += 1;
         let seq = record.seq().into_owned();
         let raw = record.all().to_vec();
         bytes = bytes.saturating_add(seq.len()).saturating_add(raw.len());
@@ -275,11 +285,11 @@ pub fn filter<R: BufRead + Send, W: Write>(
             id: record.id().to_vec(),
         });
         if batch.len() >= batch_size || bytes >= 16 * 1024 * 1024 {
-            write_batch(&mut batch, writer, options, pool)?;
+            write_batch(&mut batch, writer, options, pool, counts)?;
             bytes = 0;
         }
     }
-    write_batch(&mut batch, writer, options, pool)?;
+    write_batch(&mut batch, writer, options, pool, counts)?;
     Ok(())
 }
 

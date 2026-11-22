@@ -1,5 +1,5 @@
-use ir_chimera::{Options, Result, filter};
-use std::fs::File;
+use ir_chimera::{Counts, Options, Result, filter};
+use std::fs::{File, OpenOptions};
 use std::io::{self, BufReader, BufWriter, Write};
 use std::process;
 
@@ -18,6 +18,7 @@ OPTIONS:
     -l, --min-length <N>    Minimum aligned bases in each arm [default: 500]
     -i, --min-identity <P>  Minimum percent identity (0-100) [default: 80]
     -t, --threads <N>       Worker threads [default: available CPUs, max 8]
+        --log <FILE>        Write summary TSV to a new file (must not exist)
     -h, --help              Print this help
 
 Uses minimap2's ava-ont preset in-process, with reverse-strand alignments only.
@@ -30,6 +31,7 @@ chimera formation; repeats and sequencing errors can affect classification.
 fn run() -> Result<()> {
     let mut options = Options::default();
     let mut files = Vec::new();
+    let mut log = None;
     let mut threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(8));
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -39,6 +41,12 @@ fn run() -> Result<()> {
                 return Ok(());
             }
             "-c" | "--chimeric" => options.chimeric = true,
+            "--log" => {
+                if log.is_some() {
+                    return Err("--log may only be specified once".into());
+                }
+                log = Some(args.next().ok_or("missing value for --log")?);
+            }
             "-l" | "--min-length" => {
                 let value = args.next().ok_or("missing value for --min-length")?;
                 options.min_length = value.parse().map_err(|_| "invalid --min-length")?;
@@ -78,6 +86,7 @@ fn run() -> Result<()> {
         .num_threads(threads)
         .build()?;
     let mut format = None;
+    let mut counts = Counts::default();
     for file in files {
         if file == "-" {
             filter(
@@ -86,6 +95,7 @@ fn run() -> Result<()> {
                 options,
                 &pool,
                 &mut format,
+                &mut counts,
             )
             .map_err(|e| format!("stdin: {e}"))?;
         } else {
@@ -96,11 +106,32 @@ fn run() -> Result<()> {
                 options,
                 &pool,
                 &mut format,
+                &mut counts,
             )
             .map_err(|e| format!("{file}: {e}"))?;
         }
     }
     writer.flush()?;
+    if let Some(path) = log {
+        let fraction = if counts.n_total == 0 {
+            0.0
+        } else {
+            counts.n_kept as f64 / counts.n_total as f64
+        };
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .map_err(|e| format!("cannot create log {path}: {e}"))?;
+        write!(
+            file,
+            "n_total\tn_kept\tfraction\n{}\t{}\t{fraction:?}\n",
+            counts.n_total, counts.n_kept
+        )
+        .map_err(|e| format!("cannot write log {path}: {e}"))?;
+        file.flush()
+            .map_err(|e| format!("cannot flush log {path}: {e}"))?;
+    }
     Ok(())
 }
 

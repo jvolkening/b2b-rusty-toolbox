@@ -44,6 +44,94 @@ fn hairpin(len: usize) -> Vec<u8> {
     seq
 }
 
+fn temporary_path(label: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "ir-chimera-{}-{}-{label}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ))
+}
+
+fn assert_log(path: &std::path::Path, total: u64, kept: u64, fraction: f64) {
+    let text = std::fs::read_to_string(path).unwrap();
+    let mut lines = text.lines();
+    assert_eq!(lines.next(), Some("n_total\tn_kept\tfraction"));
+    let fields: Vec<_> = lines.next().unwrap().split('\t').collect();
+    assert_eq!(fields.len(), 3);
+    assert_eq!(fields[0].parse::<u64>().unwrap(), total);
+    assert_eq!(fields[1].parse::<u64>().unwrap(), kept);
+    assert_eq!(fields[2].parse::<f64>().unwrap(), fraction);
+    assert!(lines.next().is_none());
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn log_counts_all_batches_and_inputs_in_both_modes() {
+    let fasta = temporary_path("reads.fa");
+    let normal = b">normal\nACGT\n".repeat(12);
+    std::fs::write(&fasta, &normal).unwrap();
+    let chimera = format!(">chimera\n{}\n", String::from_utf8_lossy(&hairpin(700)));
+    let log = temporary_path("summary.tsv");
+    let args = [
+        "--threads",
+        "1",
+        "--log",
+        log.to_str().unwrap(),
+        fasta.to_str().unwrap(),
+        "-",
+    ];
+    let output = run(chimera.as_bytes(), &args);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, normal);
+    assert_log(&log, 13, 12, 12.0 / 13.0);
+
+    let args = [
+        "--threads",
+        "2",
+        "--chimeric",
+        "--log",
+        log.to_str().unwrap(),
+        fasta.to_str().unwrap(),
+        "-",
+    ];
+    let output = run(chimera.as_bytes(), &args);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, chimera.as_bytes());
+    assert_log(&log, 13, 1, 1.0 / 13.0);
+    std::fs::remove_file(fasta).unwrap();
+}
+
+#[test]
+fn empty_log_and_log_errors() {
+    let log = temporary_path("empty.tsv");
+    let output = run(b"", &["--log", log.to_str().unwrap()]);
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    assert_log(&log, 0, 0, 0.0);
+
+    std::fs::write(&log, b"existing").unwrap();
+    let output = run(b">a\nACGT\n", &["--log", log.to_str().unwrap()]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("cannot create log"));
+    assert_eq!(std::fs::read(&log).unwrap(), b"existing");
+    std::fs::remove_file(&log).unwrap();
+
+    let output = run(b">a\nACGT!\n", &["--log", log.to_str().unwrap()]);
+    assert!(!output.status.success());
+    assert!(!log.exists());
+}
+
 #[test]
 fn selects_reads_and_preserves_fastq_records() {
     let normal = dna(1400, 0x87654321);
