@@ -69,7 +69,7 @@ fn assembles_short_overlapping_reads_from_both_strands() {
     let genome = reference(1400);
     let mut reads = Vec::new();
     for start in (0..=1200).step_by(25) {
-        for i in 0..4 {
+        for i in 0..12 {
             let read = genome[start..start + 200].to_vec();
             reads.push(if i % 2 == 0 {
                 read
@@ -98,6 +98,7 @@ fn retains_branches_for_two_supported_alleles() {
         Options {
             clean_bubbles: true,
             clean_errors: false,
+            min_fraction: 0.2,
             ..Options::default()
         },
     );
@@ -118,12 +119,21 @@ fn retains_branches_for_two_supported_alleles() {
 }
 
 #[test]
-fn clean_mode_preserves_distinct_low_coverage_genome() {
+fn lower_min_count_recovers_distinct_low_coverage_genome() {
     let genome = reference(500);
     let rare = reference(1200)[1000..1120].to_vec();
     let mut reads = vec![genome.clone(); 100];
     reads.extend(vec![rare.clone(); 3]);
-    let (output, _) = assemble_with_stats(&reads, Options::default());
+    let (default_output, _) = assemble_with_stats(&reads, Options::default());
+    assert!(contains_either_strand(&default_output, &genome));
+    assert!(!contains_either_strand(&default_output, &rare));
+    let (output, _) = assemble_with_stats(
+        &reads,
+        Options {
+            min_count: 3,
+            ..Options::default()
+        },
+    );
     assert!(contains_either_strand(&output, &genome));
     assert!(contains_either_strand(&output, &rare));
 }
@@ -134,10 +144,35 @@ fn clean_mode_keeps_well_supported_alternative_allele() {
     let mut alternate = genome.clone();
     alternate[200] = if alternate[200] == b'A' { b'C' } else { b'A' };
     let mut reads = vec![genome.clone(); 100];
-    reads.extend(vec![alternate.clone(); 30]);
+    reads.extend(vec![alternate.clone(); 50]);
     let (output, _) = assemble_with_stats(&reads, Options::default());
     assert!(contains_either_strand(&output, &genome[190..211]));
     assert!(contains_either_strand(&output, &alternate[190..211]));
+}
+
+#[test]
+fn lower_min_fraction_retains_a_weaker_alternative() {
+    let genome = reference(400);
+    let mut alternate = genome.clone();
+    alternate[200] = if alternate[200] == b'A' { b'C' } else { b'A' };
+    let mut reads = vec![genome; 100];
+    reads.extend(vec![alternate.clone(); 30]);
+    let default_output = assemble(&reads, Options::default());
+    let sensitive_output = assemble(
+        &reads,
+        Options {
+            min_fraction: 0.2,
+            ..Options::default()
+        },
+    );
+    assert!(!contains_either_strand(
+        &default_output,
+        &alternate[190..211]
+    ));
+    assert!(contains_either_strand(
+        &sensitive_output,
+        &alternate[190..211]
+    ));
 }
 
 #[test]
@@ -147,7 +182,11 @@ fn saves_ambiguous_similar_fragment_when_requested() {
     for pos in [8, 14] {
         short[pos] = if short[pos] == b'A' { b'C' } else { b'A' };
     }
-    let mut assembler = Assembler::new(Options::default()).unwrap();
+    let mut assembler = Assembler::new(Options {
+        min_count: 3,
+        ..Options::default()
+    })
+    .unwrap();
     for _ in 0..100 {
         assembler.add_read(&genome).unwrap();
     }
@@ -180,6 +219,7 @@ fn cleans_weak_complete_bubble_but_preserves_unrelated_rare_sequence() {
         Options {
             clean_bubbles: true,
             clean_errors: false,
+            min_count: 3,
             ..Options::default()
         },
     );
@@ -193,6 +233,7 @@ fn cleans_weak_complete_bubble_but_preserves_unrelated_rare_sequence() {
         &reads,
         Options {
             clean_errors: false,
+            min_count: 3,
             ..Options::default()
         },
     );
@@ -205,6 +246,7 @@ fn cleans_weak_complete_bubble_but_preserves_unrelated_rare_sequence() {
         Options {
             clean_bubbles: true,
             clean_errors: false,
+            min_count: 3,
             min_fraction: 0.0,
             ..Options::default()
         },
@@ -225,6 +267,7 @@ fn cleans_weak_single_insertion_bubble() {
         Options {
             clean_bubbles: true,
             clean_errors: false,
+            min_count: 3,
             ..Options::default()
         },
     );
@@ -251,6 +294,7 @@ fn does_not_clean_a_dissimilar_weak_bubble() {
         Options {
             clean_bubbles: true,
             clean_errors: false,
+            min_count: 3,
             ..Options::default()
         },
     );
@@ -264,7 +308,7 @@ fn circular_unitig_is_marked_and_contains_its_overlap() {
     let mut wrapped = genome.clone();
     wrapped.extend_from_slice(&genome[..20]);
     let mut assembler = Assembler::new(Options::default()).unwrap();
-    for _ in 0..3 {
+    for _ in 0..10 {
         assembler.add_read(&wrapped).unwrap();
     }
     let mut output = Vec::new();
@@ -361,7 +405,7 @@ fn assembles_noisy_short_reads_at_high_depth() {
 fn ambiguous_bases_break_paths_and_short_reads_are_accepted() {
     let mut sequence = reference(120);
     sequence[60] = b'N';
-    let mut reads = vec![sequence; 3];
+    let mut reads = vec![sequence; 10];
     reads.push(b"ACGT".to_vec());
     let output = assemble(&reads, Options::default());
     assert_eq!(output.len(), 2);
@@ -459,7 +503,7 @@ fn cli_writes_uncertain_fragments_separately() {
         .spawn()
         .unwrap();
     let mut input = Vec::new();
-    for sequence in std::iter::repeat_n(&genome, 100).chain(std::iter::repeat_n(&short, 4)) {
+    for sequence in std::iter::repeat_n(&genome, 100).chain(std::iter::repeat_n(&short, 10)) {
         input.extend_from_slice(b">read\n");
         input.extend_from_slice(sequence);
         input.push(b'\n');

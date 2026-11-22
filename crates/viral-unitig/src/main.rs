@@ -14,8 +14,8 @@ Use '-' once to include stdin among input files.
 
 OPTIONS:
     -k, --kmer <ODD>         k-mer size, 15 to 31 [default: 21]
-    --min-count <N>          Minimum k-mer occurrences [default: 3]
-    --min-fraction <F>       Minimum local branch support, 0 <= F < 1 [default: 0.2]
+    --min-count <N>          Minimum k-mer occurrences [default: 10]
+    --min-fraction <F>       Minimum local branch support, 0 <= F < 1 [default: 0.4]
     --clean-bubbles          Experimentally remove weak, similar bubble paths
     --no-clean-errors        Disable experimental near-neighbor error filtering
     --clean-errors           Enable near-neighbor error filtering [default]
