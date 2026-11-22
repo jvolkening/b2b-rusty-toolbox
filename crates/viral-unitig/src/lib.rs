@@ -1,4 +1,4 @@
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::io::{self, BufRead, Write};
 
 #[derive(Clone, Copy, Debug)]
@@ -8,6 +8,7 @@ pub struct Options {
     pub min_fraction: f64,
     pub min_length: usize,
     pub max_kmers: usize,
+    pub clean_bubbles: bool,
 }
 
 impl Default for Options {
@@ -18,6 +19,7 @@ impl Default for Options {
             min_fraction: 0.1,
             min_length: 0,
             max_kmers: 10_000_000,
+            clean_bubbles: false,
         }
     }
 }
@@ -34,6 +36,13 @@ struct Node {
     max_out: u32,
     incoming: u8,
     outgoing: u8,
+}
+
+#[derive(Default, Debug)]
+pub struct AssemblyStats {
+    pub unitigs: usize,
+    pub removed_bubble_paths: usize,
+    pub removed_bubble_kmers: usize,
 }
 
 pub struct Assembler {
@@ -68,6 +77,32 @@ fn decode(word: u64, len: usize, out: &mut Vec<u8>) {
     for i in (0..len).rev() {
         out.push(b"ACGT"[((word >> (2 * i)) & 3) as usize]);
     }
+}
+
+fn within_two_edits(a: &[u8], b: &[u8]) -> bool {
+    if a.len().abs_diff(b.len()) > 2 {
+        return false;
+    }
+    let mut previous: Vec<usize> = (0..=b.len()).collect();
+    let mut current = vec![0; b.len() + 1];
+    for (i, &left) in a.iter().enumerate() {
+        current[0] = i + 1;
+        for (j, &right) in b.iter().enumerate() {
+            current[j + 1] = (previous[j + 1] + 1)
+                .min(current[j] + 1)
+                .min(previous[j] + usize::from(left != right));
+        }
+        std::mem::swap(&mut previous, &mut current);
+    }
+    previous[b.len()] <= 2
+}
+
+struct Path {
+    words: Vec<u64>,
+    sequence: Vec<u8>,
+    min_count: u32,
+    max_count: u32,
+    end: u64,
 }
 
 impl Assembler {
@@ -200,7 +235,7 @@ impl Assembler {
         Ok(())
     }
 
-    pub fn write_unitigs<W: Write>(mut self, mut writer: W) -> io::Result<usize> {
+    pub fn write_unitigs<W: Write>(mut self, mut writer: W) -> io::Result<AssemblyStats> {
         let k = self.options.k;
         self.edges
             .retain(|_, edge| edge.count >= self.options.min_count);
@@ -211,17 +246,30 @@ impl Assembler {
                 let (from, to) = nodes(oriented, k);
                 let source = graph.entry(from).or_default();
                 source.max_out = source.max_out.max(edge.count);
+                source.outgoing += 1;
                 let target = graph.entry(to).or_default();
                 target.max_in = target.max_in.max(edge.count);
+                target.incoming += 1;
             }
         }
 
         let fraction = self.options.min_fraction;
+        let mut stats = AssemblyStats::default();
+        if self.options.clean_bubbles && fraction > 0.0 {
+            let (removed, paths) = self.weak_bubbles(&graph);
+            stats.removed_bubble_paths = paths;
+            stats.removed_bubble_kmers = removed.len();
+            self.edges.retain(|word, _| !removed.contains(word));
+        }
         self.edges.retain(|&word, edge| {
             let (from, to) = nodes(word, k);
             (edge.count as f64) >= fraction * (graph[&from].max_out as f64)
                 && (edge.count as f64) >= fraction * (graph[&to].max_in as f64)
         });
+        for node in graph.values_mut() {
+            node.incoming = 0;
+            node.outgoing = 0;
+        }
         for &word in self.edges.keys() {
             for oriented in [word, reverse_complement(word, k)] {
                 let (from, to) = nodes(oriented, k);
@@ -231,7 +279,6 @@ impl Assembler {
         }
         let mut words: Vec<u64> = self.edges.keys().copied().collect();
         words.sort_unstable();
-        let mut emitted = 0;
 
         // Start at junctions first, then consume isolated cycles.
         for cycles in [false, true] {
@@ -249,10 +296,11 @@ impl Assembler {
                     if sequence.len() < self.options.min_length {
                         continue;
                     }
-                    emitted += 1;
+                    stats.unitigs += 1;
                     writeln!(
                         writer,
-                        ">unitig_{emitted} length={} circular={circular}",
+                        ">unitig_{} length={} circular={circular}",
+                        stats.unitigs,
                         sequence.len()
                     )?;
                     for chunk in sequence.chunks(80) {
@@ -263,7 +311,126 @@ impl Assembler {
             }
         }
         writer.flush()?;
-        Ok(emitted)
+        Ok(stats)
+    }
+
+    fn weak_bubbles(&self, graph: &HashMap<u64, Node>) -> (HashSet<u64>, usize) {
+        let k = self.options.k;
+        let mut removed = HashSet::new();
+        let mut protected = HashSet::new();
+        let mut paths = 0;
+        let mut words: Vec<u64> = self.edges.keys().copied().collect();
+        words.sort_unstable();
+        for word in words {
+            let edge = &self.edges[&word];
+            for first in [word, reverse_complement(word, k)] {
+                let (start, _) = nodes(first, k);
+                let source = &graph[&start];
+                if source.outgoing < 2
+                    || edge.count as f64 >= self.options.min_fraction * source.max_out as f64
+                {
+                    continue;
+                }
+                let Some(weak) = self.trace_weak_path(first, graph) else {
+                    continue;
+                };
+                if graph[&weak.end].incoming < 2 {
+                    continue;
+                }
+                let Some(strong) = self.trace_strong_path(start, weak.end, &weak.words) else {
+                    continue;
+                };
+                if weak.max_count as f64 >= self.options.min_fraction * strong.min_count as f64
+                    || !within_two_edits(&weak.sequence, &strong.sequence)
+                {
+                    continue;
+                }
+                // Never remove a path used as evidence for another removal.
+                if weak
+                    .words
+                    .iter()
+                    .any(|key| removed.contains(key) || protected.contains(key))
+                    || strong.words.iter().any(|key| {
+                        let (from, to) = nodes(*key, k);
+                        let count = self.edges[key].count as f64;
+                        removed.contains(key)
+                            || count < self.options.min_fraction * graph[&from].max_out as f64
+                            || count < self.options.min_fraction * graph[&to].max_in as f64
+                    })
+                {
+                    continue;
+                }
+                protected.extend(strong.words);
+                removed.extend(weak.words);
+                paths += 1;
+            }
+        }
+        (removed, paths)
+    }
+
+    fn trace_weak_path(&self, first: u64, graph: &HashMap<u64, Node>) -> Option<Path> {
+        let k = self.options.k;
+        let mut path = Path {
+            words: Vec::new(),
+            sequence: Vec::new(),
+            min_count: u32::MAX,
+            max_count: 0,
+            end: 0,
+        };
+        let mut word = first;
+        loop {
+            let key = canonical(word, k);
+            if path.words.contains(&key) || path.words.len() >= 2 * k + 2 {
+                return None;
+            }
+            let count = self.edges[&key].count;
+            path.words.push(key);
+            path.sequence.push(b"ACGT"[(word & 3) as usize]);
+            path.min_count = path.min_count.min(count);
+            path.max_count = path.max_count.max(count);
+            path.end = nodes(word, k).1;
+            let node = &graph[&path.end];
+            if node.incoming != 1 || node.outgoing != 1 {
+                return Some(path);
+            }
+            word = (0..4)
+                .map(|base| (path.end << 2) | base)
+                .find(|&candidate| self.edges.contains_key(&canonical(candidate, k)))?;
+        }
+    }
+
+    fn trace_strong_path(&self, start: u64, end: u64, weak: &[u64]) -> Option<Path> {
+        let k = self.options.k;
+        let mut path = Path {
+            words: Vec::new(),
+            sequence: Vec::new(),
+            min_count: u32::MAX,
+            max_count: 0,
+            end: start,
+        };
+        while path.end != end || path.words.is_empty() {
+            if path.words.len() >= 2 * k + 2 {
+                return None;
+            }
+            let word = (0..4)
+                .map(|base| (path.end << 2) | base)
+                .filter_map(|candidate| {
+                    let key = canonical(candidate, k);
+                    self.edges
+                        .get(&key)
+                        .map(|edge| (edge.count, candidate, key))
+                })
+                .max()?;
+            if weak.contains(&word.2) || path.words.contains(&word.2) {
+                return None;
+            }
+            path.words.push(word.2);
+            path.sequence.push(b"ACGT"[(word.1 & 3) as usize]);
+            path.min_count = path.min_count.min(word.0);
+            path.max_count = path.max_count.max(word.0);
+            path.end = nodes(word.1, k).1;
+        }
+        Some(path)
     }
 
     fn walk(&mut self, first: u64, graph: &HashMap<u64, Node>) -> (Vec<u8>, bool) {

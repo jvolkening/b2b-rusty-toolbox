@@ -1,6 +1,6 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
-use viral_unitig::{Assembler, Options};
+use viral_unitig::{Assembler, AssemblyStats, Options};
 
 fn reference(len: usize) -> Vec<u8> {
     let mut state = 0x92b7_a1e5_3f6c_8471u64;
@@ -41,13 +41,26 @@ fn sequences(data: &[u8]) -> Vec<Vec<u8>> {
 }
 
 fn assemble(reads: &[Vec<u8>], options: Options) -> Vec<Vec<u8>> {
+    assemble_with_stats(reads, options).0
+}
+
+fn assemble_with_stats(reads: &[Vec<u8>], options: Options) -> (Vec<Vec<u8>>, AssemblyStats) {
     let mut assembler = Assembler::new(options).unwrap();
     for read in reads {
         assembler.add_read(read).unwrap();
     }
     let mut output = Vec::new();
-    assembler.write_unitigs(&mut output).unwrap();
-    sequences(&output)
+    let stats = assembler.write_unitigs(&mut output).unwrap();
+    (sequences(&output), stats)
+}
+
+fn contains_either_strand(unitigs: &[Vec<u8>], sequence: &[u8]) -> bool {
+    unitigs.iter().any(|seq| {
+        seq.windows(sequence.len()).any(|window| window == sequence)
+            || reverse_complement(seq)
+                .windows(sequence.len())
+                .any(|window| window == sequence)
+    })
 }
 
 #[test]
@@ -79,7 +92,13 @@ fn retains_branches_for_two_supported_alleles() {
     };
     let mut reads = vec![genome.clone(); 30];
     reads.extend(vec![variant.clone(); 10]);
-    let output = assemble(&reads, Options::default());
+    let output = assemble(
+        &reads,
+        Options {
+            clean_bubbles: true,
+            ..Options::default()
+        },
+    );
     // Branches are emitted separately, not arbitrarily resolved into one strain.
     assert!(output.iter().any(|seq| {
         seq.windows(21).any(|w| w == &genome[190..211])
@@ -94,6 +113,89 @@ fn retains_branches_for_two_supported_alleles() {
                 .any(|w| w == &variant[190..211])
     }));
     assert!(!output.iter().any(|seq| seq.len() == genome.len()));
+}
+
+#[test]
+fn cleans_weak_complete_bubble_but_preserves_unrelated_rare_sequence() {
+    let genome = reference(400);
+    let rare = reference(800)[600..720].to_vec();
+    let mut error = genome.clone();
+    error[200] = if error[200] == b'A' { b'C' } else { b'A' };
+    let mut reads = vec![genome.clone(); 100];
+    reads.extend(vec![error.clone(); 4]);
+    reads.extend(vec![rare.clone(); 3]);
+
+    let (cleaned, stats) = assemble_with_stats(
+        &reads,
+        Options {
+            clean_bubbles: true,
+            ..Options::default()
+        },
+    );
+    assert!(stats.removed_bubble_paths > 0);
+    assert!(stats.removed_bubble_kmers > 0);
+    assert!(contains_either_strand(&cleaned, &genome));
+    assert!(contains_either_strand(&cleaned, &rare));
+    assert!(!contains_either_strand(&cleaned, &error[190..211]));
+
+    let (uncleaned, stats) = assemble_with_stats(&reads, Options::default());
+    assert_eq!(stats.removed_bubble_paths, 0);
+    assert!(contains_either_strand(&uncleaned, &error[190..211]));
+    assert!(cleaned.len() < uncleaned.len());
+
+    let (unfiltered, stats) = assemble_with_stats(
+        &reads,
+        Options {
+            clean_bubbles: true,
+            min_fraction: 0.0,
+            ..Options::default()
+        },
+    );
+    assert_eq!(stats.removed_bubble_paths, 0);
+    assert!(contains_either_strand(&unfiltered, &error[190..211]));
+}
+
+#[test]
+fn cleans_weak_single_insertion_bubble() {
+    let genome = reference(400);
+    let mut error = genome.clone();
+    error.insert(200, if genome[200] == b'A' { b'C' } else { b'A' });
+    let mut reads = vec![genome.clone(); 100];
+    reads.extend(vec![error; 4]);
+    let (output, stats) = assemble_with_stats(
+        &reads,
+        Options {
+            clean_bubbles: true,
+            ..Options::default()
+        },
+    );
+    assert!(stats.removed_bubble_paths > 0);
+    assert!(contains_either_strand(&output, &genome));
+}
+
+#[test]
+fn does_not_clean_a_dissimilar_weak_bubble() {
+    let genome = reference(400);
+    let mut alternate = genome.clone();
+    for base in &mut alternate[200..203] {
+        *base = match *base {
+            b'A' => b'C',
+            b'C' => b'G',
+            b'G' => b'T',
+            _ => b'A',
+        };
+    }
+    let mut reads = vec![genome; 100];
+    reads.extend(vec![alternate.clone(); 4]);
+    let (output, stats) = assemble_with_stats(
+        &reads,
+        Options {
+            clean_bubbles: true,
+            ..Options::default()
+        },
+    );
+    assert_eq!(stats.removed_bubble_paths, 0);
+    assert!(contains_either_strand(&output, &alternate[195..216]));
 }
 
 #[test]

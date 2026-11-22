@@ -12,7 +12,7 @@ def main():
     random.seed(4096)
     reference = "".join(random.choices("ACGT", k=3000))
     complement = str.maketrans("ACGT", "TGCA")
-    print("substitution_rate,indel_rate,nominal_depth,unitigs,longest_exact")
+    print("substitution_rate,indel_rate,nominal_depth,bubble_cleaning,unitigs,longest_exact")
     for substitutions, indels, depth in [(0.01, 0.01, 100), (0.02, 0.02, 100), (0.02, 0.02, 1000)]:
         reads = []
         for i in range(round(depth * len(reference) / 250)):
@@ -28,20 +28,22 @@ def main():
                     base = random.choice([other for other in "ACGT" if other != base])
                 sequence.append(base)
             reads.extend((">r" + str(i), "".join(sequence)))
-        result = subprocess.run(
-            [sys.argv[1]], input=("\n".join(reads) + "\n").encode(),
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
-        )
-        unitigs = [
-            "".join(record.splitlines()[1:])
-            for record in result.stdout.decode("ascii").split(">")
-            if record
-        ]
-        exact = [
-            len(seq) for seq in unitigs
-            if seq in reference or seq.translate(complement)[::-1] in reference
-        ]
-        print(f"{substitutions},{indels},{depth},{len(unitigs)},{max(exact, default=0)}")
+        input_data = ("\n".join(reads) + "\n").encode()
+        for enabled, options in [(False, []), (True, ["--clean-bubbles"])]:
+            result = subprocess.run(
+                [sys.argv[1], *options], input=input_data,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
+            )
+            unitigs = [
+                "".join(record.splitlines()[1:])
+                for record in result.stdout.decode("ascii").split(">")
+                if record
+            ]
+            exact = [
+                len(seq) for seq in unitigs
+                if seq in reference or seq.translate(complement)[::-1] in reference
+            ]
+            print(f"{substitutions},{indels},{depth},{enabled},{len(unitigs)},{max(exact, default=0)}")
 
 
 if __name__ == "__main__":
