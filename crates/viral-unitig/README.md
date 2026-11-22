@@ -54,6 +54,16 @@ that a fragment is an error. In complex metagenomes, a real virus or strain can
 be filtered or routed to the uncertain file, including by chance similarity.
 The uncertain file does not capture k-mers removed before unitig generation.
 
+Every primary and uncertain FASTA header includes `mean_kmer_depth`, the
+arithmetic mean of the input occurrence counts of the canonical k-mers along
+the emitted unitig, rounded to two decimal places. For circular unitigs the
+duplicated k-1 overlap does not add extra k-mer positions. Counts combine both
+strands and all input files and saturate at 2^32-1 per distinct k-mer.
+This is a rough relative-support signal, **not a count of reads or an unbiased
+estimate of base coverage or organism abundance**: repeated sequences, shared
+k-mers, read length, errors, uneven coverage and filtering can bias it.
+Discarded or corrected error k-mers are not reassigned to the retained path.
+
 Use `--no-clean-errors --min-fraction 0 --min-count 3` to disable both the
 near-neighbor cleaner and relative branch filtering when investigating
 low-frequency alternatives, while retaining a minimum count of 3. Cleaning
