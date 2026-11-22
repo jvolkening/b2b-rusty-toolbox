@@ -11,10 +11,11 @@ cargo build --release -p viral-unitig
 set -o pipefail
 gzip -dc reads.fastq.gz | target/release/viral-unitig > unitigs.fa
 # Or use one or more uncompressed FASTA/FASTQ files:
-target/release/viral-unitig sample1.fq sample2.fq > unitigs.fa
+target/release/viral-unitig --uncertain uncertain.fa sample1.fq sample2.fq > unitigs.fa
 ```
 
-The defaults are `k=21`, minimum count 3, and minimum branch support 0.1.
+The defaults are `k=21`, minimum count 3, minimum branch support 0.2, and
+coverage-relative error cleaning enabled.
 Only A/C/G/T participate in k-mers; IUPAC ambiguous bases break k-mers.
 Reads shorter than k are accepted but contribute no k-mers. Both strands are
 combined, and FASTQ qualities are checked for format but not used in assembly.
@@ -30,6 +31,25 @@ at the cost of more sequencing-error branches. `--min-count` similarly trades
 low-coverage recovery against error suppression. K-mer counts count
 occurrences, not independent reads; repeats can inflate support.
 
+The default cleaner compares low-count k-mers to much more abundant similar
+k-mers, including substitution and indel-like neighbors. It removes weak
+k-mers only when their extended local graph contexts are similar. A second
+pass also considers two-substitution neighbors. After graph traversal, short
+unitigs (`<= 2*k+2` bases) that closely match a much better-supported path are
+treated as uncertain. Without `--uncertain`, they are **discarded** and their
+count is reported on stderr. With `--uncertain FILE`, they are written to that
+new file instead; the file must not already exist. These matches are not proof
+that a fragment is an error. In complex metagenomes, a real virus or strain can
+be filtered or routed to the uncertain file, including by chance similarity.
+The uncertain file does not capture k-mers removed before unitig generation.
+
+Use `--no-clean-errors --min-fraction 0` to disable both the near-neighbor
+cleaner and relative branch filtering when investigating low-frequency
+alternatives; `--min-count` still applies. Cleaning does not use base
+qualities or read linkage and can collapse true closely related populations.
+The short-unitig search checks at most 50,000 neighbors per unitig; on reaching
+that limit it retains the unitig and reports a warning.
+
 `--clean-bubbles` enables an additional **experimental, opt-in** cleanup.
 Before edge filtering, it looks for short unbranched weak paths that diverge
 and rejoin a stronger path, and removes the entire weak path if its maximum
@@ -39,11 +59,8 @@ must differ by at most two edits. Counts of removed paths and k-mers are
 reported on stderr. Incomplete bubbles and unanchored fragments are left alone.
 
 This evidence cannot distinguish an error from a true low-frequency strain
-or related virus: the option can eliminate real variation. It does not use
-read linkage or base qualities. Disabling it retains weak bubble interiors,
-but the ordinary relative-support filter may still break those paths. To
-retain relative-support alternatives for investigation, use
-`--min-fraction 0`; the absolute `--min-count` filter still applies.
+or related virus: the option can eliminate real variation. Disabling it does
+not disable the other cleanup and filtering steps.
 
 Unitigs stop at branches. Alternative alleles are **not phased into complete
 strain contigs**, and individual unitigs are not assigned to organisms.
@@ -56,9 +73,10 @@ coverage normalization, graph export or long-read scaffolding.
 This single-threaded in-memory prototype keeps even singleton k-mers until
 input has been counted. `--max-kmers` limits distinct k-mers and fails instead
 of silently discarding them; it is **not a memory limit**. Graph construction
-uses additional memory, and the 5-billion-base / 64-GB target has not been
-demonstrated. The defaults and algorithm have not been evaluated against
-existing assemblers, real nanopore reads or mixed-infection truth sets.
+uses additional memory. Neighbor searches and buffering short unitigs can be
+expensive. The 5-billion-base / 64-GB target has not been demonstrated, and
+there has been no comparison against existing assemblers or validation on real
+nanopore reads or mixed-infection truth sets.
 Do not interpret missing unitigs as absence of an organism. Independent
 benchmarking and validation are required before drawing biological conclusions.
 
@@ -68,19 +86,26 @@ From the repository root, run:
 
 ```sh
 python3 crates/viral-unitig/benchmarks/synthetic.py target/release/viral-unitig
+python3 crates/viral-unitig/benchmarks/mixed.py target/release/viral-unitig
 ```
 
 This simulates a single random 3 kb sequence, uniformly sampled 250-base
 fragments, and independent uniform substitutions, insertions and deletions.
 It reports nominal depth, unitig count and the longest unitig exactly matching
-the reference on either strand, both with and without bubble cleanup. It does
-not model nanopore error distributions, repeats, mixed infections, bacterial
-reads, or large datasets.
+the reference on either strand, and the number of fragments written to the
+uncertain file. It does not model nanopore error distributions, repeats,
+bacterial reads, or large datasets.
 
-For example, at 100x nominal depth with 2% substitutions and 2% indel events,
-cleanup reduced 449 unitigs to 442; at 1000x it reduced 16,992 to 15,663.
-The longest exact unitigs remained 219 and 2,878 bases, respectively. Many
-error fragments remain, and the 100x case remains highly fragmented. These
-results do not establish superiority over other assemblers. Approximate-overlap
-and repeat-graph approaches, such as Flye's, are possible future directions;
-they are not implemented here.
+In the 1000x case with 2% substitutions and 2% indel events, the default
+produced one 2,997-base exact primary unitig, while 13,979 short unitigs were
+classified as uncertain. At 100x with the same errors, it produced five
+primary unitigs, with a longest exact unitig of 2,192 bases.
+
+The second benchmark simulates two 1 kb genomes using 200-base fragments and
+1% substitutions plus 1% indel events. An unrelated 50x genome mixed with a
+1000x genome produced three primary unitigs, with longest exact matches of
+964 and 999 bases. Two related genomes at 600x and 300x produced 19 primary
+unitigs: all six alternate sites were represented, but the longest exact
+match to either genome was only 150 bases. This does **not** demonstrate
+strain phasing or superiority over other assemblers. Approximate-overlap and
+repeat-graph approaches, such as Flye's, are not implemented.
