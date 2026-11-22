@@ -1,5 +1,6 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
+use std::time::{SystemTime, UNIX_EPOCH};
 use viral_unitig::{Assembler, AssemblyStats, Options};
 
 fn reference(len: usize) -> Vec<u8> {
@@ -96,6 +97,7 @@ fn retains_branches_for_two_supported_alleles() {
         &reads,
         Options {
             clean_bubbles: true,
+            clean_errors: false,
             ..Options::default()
         },
     );
@@ -116,6 +118,54 @@ fn retains_branches_for_two_supported_alleles() {
 }
 
 #[test]
+fn clean_mode_preserves_distinct_low_coverage_genome() {
+    let genome = reference(500);
+    let rare = reference(1200)[1000..1120].to_vec();
+    let mut reads = vec![genome.clone(); 100];
+    reads.extend(vec![rare.clone(); 3]);
+    let (output, _) = assemble_with_stats(&reads, Options::default());
+    assert!(contains_either_strand(&output, &genome));
+    assert!(contains_either_strand(&output, &rare));
+}
+
+#[test]
+fn clean_mode_keeps_well_supported_alternative_allele() {
+    let genome = reference(400);
+    let mut alternate = genome.clone();
+    alternate[200] = if alternate[200] == b'A' { b'C' } else { b'A' };
+    let mut reads = vec![genome.clone(); 100];
+    reads.extend(vec![alternate.clone(); 30]);
+    let (output, _) = assemble_with_stats(&reads, Options::default());
+    assert!(contains_either_strand(&output, &genome[190..211]));
+    assert!(contains_either_strand(&output, &alternate[190..211]));
+}
+
+#[test]
+fn saves_ambiguous_similar_fragment_when_requested() {
+    let genome = reference(500);
+    let mut short = genome[200..225].to_vec();
+    for pos in [8, 14] {
+        short[pos] = if short[pos] == b'A' { b'C' } else { b'A' };
+    }
+    let mut assembler = Assembler::new(Options::default()).unwrap();
+    for _ in 0..100 {
+        assembler.add_read(&genome).unwrap();
+    }
+    for _ in 0..4 {
+        assembler.add_read(&short).unwrap();
+    }
+    let mut output = Vec::new();
+    let mut uncertain = Vec::new();
+    let stats = assembler
+        .write_unitigs_with_uncertain(&mut output, Some(&mut uncertain))
+        .unwrap();
+    assert!(contains_either_strand(&sequences(&output), &genome));
+    assert!(contains_either_strand(&sequences(&uncertain), &short));
+    assert!(stats.separated_uncertain_unitigs > 0);
+    assert_eq!(stats.discarded_uncertain_unitigs, 0);
+}
+
+#[test]
 fn cleans_weak_complete_bubble_but_preserves_unrelated_rare_sequence() {
     let genome = reference(400);
     let rare = reference(800)[600..720].to_vec();
@@ -129,6 +179,7 @@ fn cleans_weak_complete_bubble_but_preserves_unrelated_rare_sequence() {
         &reads,
         Options {
             clean_bubbles: true,
+            clean_errors: false,
             ..Options::default()
         },
     );
@@ -138,7 +189,13 @@ fn cleans_weak_complete_bubble_but_preserves_unrelated_rare_sequence() {
     assert!(contains_either_strand(&cleaned, &rare));
     assert!(!contains_either_strand(&cleaned, &error[190..211]));
 
-    let (uncleaned, stats) = assemble_with_stats(&reads, Options::default());
+    let (uncleaned, stats) = assemble_with_stats(
+        &reads,
+        Options {
+            clean_errors: false,
+            ..Options::default()
+        },
+    );
     assert_eq!(stats.removed_bubble_paths, 0);
     assert!(contains_either_strand(&uncleaned, &error[190..211]));
     assert!(cleaned.len() < uncleaned.len());
@@ -147,6 +204,7 @@ fn cleans_weak_complete_bubble_but_preserves_unrelated_rare_sequence() {
         &reads,
         Options {
             clean_bubbles: true,
+            clean_errors: false,
             min_fraction: 0.0,
             ..Options::default()
         },
@@ -166,6 +224,7 @@ fn cleans_weak_single_insertion_bubble() {
         &reads,
         Options {
             clean_bubbles: true,
+            clean_errors: false,
             ..Options::default()
         },
     );
@@ -191,6 +250,7 @@ fn does_not_clean_a_dissimilar_weak_bubble() {
         &reads,
         Options {
             clean_bubbles: true,
+            clean_errors: false,
             ..Options::default()
         },
     );
@@ -258,7 +318,7 @@ fn assembles_noisy_short_reads_at_high_depth() {
         state
     };
     let mut reads = Vec::new();
-    for _ in 0..4800 {
+    for _ in 0..6000 {
         let start = (random() as usize) % (genome.len() - 200 + 1);
         let mut read = Vec::new();
         for &original_base in &genome[start..start + 200] {
@@ -280,6 +340,7 @@ fn assembles_noisy_short_reads_at_high_depth() {
         reads.push(read);
     }
     let output = assemble(&reads, Options::default());
+    assert_eq!(output.len(), 1, "unitigs: {}", output.len());
     let longest_exact = output
         .iter()
         .filter(|seq| {
@@ -291,7 +352,7 @@ fn assembles_noisy_short_reads_at_high_depth() {
         .max()
         .unwrap_or(0);
     assert!(
-        longest_exact >= 500,
+        longest_exact >= 1000,
         "longest exact unitig: {longest_exact}"
     );
 }
@@ -353,4 +414,61 @@ fn cli_reports_bad_input_without_emitting_fasta() {
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
     assert!(String::from_utf8_lossy(&output.stderr).contains("truncated FASTQ quality"));
+}
+
+#[test]
+fn cli_refuses_to_overwrite_uncertain_output() {
+    let existing = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_viral-unitig"))
+        .args(["--uncertain", existing])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b">read\nACGTACGTACGTACGTACGTACGT\n")
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
+fn cli_writes_uncertain_fragments_separately() {
+    let genome = reference(500);
+    let mut short = genome[200..225].to_vec();
+    for pos in [8, 14] {
+        short[pos] = if short[pos] == b'A' { b'C' } else { b'A' };
+    }
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let path =
+        std::env::temp_dir().join(format!("viral-unitig-{}-{unique}.fa", std::process::id()));
+    let mut child = Command::new(env!("CARGO_BIN_EXE_viral-unitig"))
+        .arg("--uncertain")
+        .arg(&path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = Vec::new();
+    for sequence in std::iter::repeat_n(&genome, 100).chain(std::iter::repeat_n(&short, 4)) {
+        input.extend_from_slice(b">read\n");
+        input.extend_from_slice(sequence);
+        input.push(b'\n');
+    }
+    child.stdin.take().unwrap().write_all(&input).unwrap();
+    let result = child.wait_with_output().unwrap();
+    let uncertain = std::fs::read(&path).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    assert!(result.status.success());
+    assert!(contains_either_strand(&sequences(&result.stdout), &genome));
+    assert!(contains_either_strand(&sequences(&uncertain), &short));
 }
