@@ -87,6 +87,9 @@ From the repository root, run:
 ```sh
 python3 crates/viral-unitig/benchmarks/synthetic.py target/release/viral-unitig
 python3 crates/viral-unitig/benchmarks/mixed.py target/release/viral-unitig
+python3 crates/viral-unitig/benchmarks/strains.py target/release/viral-unitig
+# An aggressive high-coverage setting, with a substantial sensitivity tradeoff:
+python3 crates/viral-unitig/benchmarks/strains.py target/release/viral-unitig --min-count 10 --min-fraction 0.4
 ```
 
 This simulates a single random 3 kb sequence, uniformly sampled 250-base
@@ -109,3 +112,26 @@ unitigs: all six alternate sites were represented, but the longest exact
 match to either genome was only 150 bases. This does **not** demonstrate
 strain phasing or superiority over other assemblers. Approximate-overlap and
 repeat-graph approaches, such as Flye's, are not implemented.
+
+The third benchmark simulates two 10 kb genomes differing at uniformly
+sampled substitutions, with 1,000x and 200x nominal coverage, 250-base
+fragments, and independent 2% substitutions and 2% insertion/deletion events.
+It reports primary and uncertain unitig counts, longest exact matches and
+recovery of strain-specific 21-mer positions. These k-mers can be scattered
+across unitigs and do **not** establish complete or correctly phased genomes.
+
+For these fixed synthetic seeds, `--min-count 10 --min-fraction 0.4` trades
+minority recovery for longer major-strain unitigs:
+
+| Divergence | Settings | Primary unitigs | Longest exact major unitig | Minor-specific 21-mer recovery |
+|---|---|---:|---:|---:|
+| 10% | defaults | 528 | 578 bp | 93.38% |
+| 10% | aggressive | 162 | 9,990 bp | 62.07% |
+| 5% | defaults | 674 | 267 bp | 86.70% |
+| 5% | aggressive | 78 | 9,987 bp | 25.81% |
+
+These settings are **not defaults**: an absolute count threshold of 10 can
+discard low-coverage organisms, and stronger relative filtering can erase
+real minority strains. Neither setting produces a complete minor-strain
+contig in this simulation. Real errors and population structure may behave
+very differently.
