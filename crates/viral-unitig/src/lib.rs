@@ -16,8 +16,8 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             k: 21,
-            min_count: 3,
-            min_fraction: 0.2,
+            min_count: 10,
+            min_fraction: 0.4,
             min_length: 0,
             max_kmers: 10_000_000,
             clean_bubbles: false,

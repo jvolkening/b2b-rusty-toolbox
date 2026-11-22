@@ -14,8 +14,11 @@ gzip -dc reads.fastq.gz | target/release/viral-unitig > unitigs.fa
 target/release/viral-unitig --uncertain uncertain.fa sample1.fq sample2.fq > unitigs.fa
 ```
 
-The defaults are `k=21`, minimum count 3, minimum branch support 0.2, and
-coverage-relative error cleaning enabled.
+The defaults are `k=21`, minimum count 10, minimum branch support 0.4, and
+coverage-relative error cleaning enabled. **These aggressive defaults can
+discard low-coverage organisms and collapse or erase real minority strains.**
+For a less aggressive investigation, use `--min-count 3 --min-fraction 0.2`,
+at the cost of more error-derived fragments.
 Only A/C/G/T participate in k-mers; IUPAC ambiguous bases break k-mers.
 Reads shorter than k are accepted but contribute no k-mers. Both strands are
 combined, and FASTQ qualities are checked for format but not used in assembly.
@@ -43,10 +46,11 @@ that a fragment is an error. In complex metagenomes, a real virus or strain can
 be filtered or routed to the uncertain file, including by chance similarity.
 The uncertain file does not capture k-mers removed before unitig generation.
 
-Use `--no-clean-errors --min-fraction 0` to disable both the near-neighbor
-cleaner and relative branch filtering when investigating low-frequency
-alternatives; `--min-count` still applies. Cleaning does not use base
-qualities or read linkage and can collapse true closely related populations.
+Use `--no-clean-errors --min-fraction 0 --min-count 3` to disable both the
+near-neighbor cleaner and relative branch filtering when investigating
+low-frequency alternatives, while retaining a minimum count of 3. Cleaning
+does not use base qualities or read linkage and can collapse true closely
+related populations.
 The short-unitig search checks at most 50,000 neighbors per unitig; on reaching
 that limit it retains the unitig and reports a warning.
 
@@ -88,8 +92,8 @@ From the repository root, run:
 python3 crates/viral-unitig/benchmarks/synthetic.py target/release/viral-unitig
 python3 crates/viral-unitig/benchmarks/mixed.py target/release/viral-unitig
 python3 crates/viral-unitig/benchmarks/strains.py target/release/viral-unitig
-# An aggressive high-coverage setting, with a substantial sensitivity tradeoff:
-python3 crates/viral-unitig/benchmarks/strains.py target/release/viral-unitig --min-count 10 --min-fraction 0.4
+# Compare the previous, less aggressive settings:
+python3 crates/viral-unitig/benchmarks/strains.py target/release/viral-unitig --min-count 3 --min-fraction 0.2
 ```
 
 This simulates a single random 3 kb sequence, uniformly sampled 250-base
@@ -100,16 +104,16 @@ uncertain file. It does not model nanopore error distributions, repeats,
 bacterial reads, or large datasets.
 
 In the 1000x case with 2% substitutions and 2% indel events, the default
-produced one 2,997-base exact primary unitig, while 13,979 short unitigs were
+produced one 2,985-base exact primary unitig, while 1,398 short unitigs were
 classified as uncertain. At 100x with the same errors, it produced five
-primary unitigs, with a longest exact unitig of 2,192 bases.
+primary unitigs, with a longest exact unitig of 2,876 bases.
 
 The second benchmark simulates two 1 kb genomes using 200-base fragments and
-1% substitutions plus 1% indel events. An unrelated 50x genome mixed with a
-1000x genome produced three primary unitigs, with longest exact matches of
-964 and 999 bases. Two related genomes at 600x and 300x produced 19 primary
-unitigs: all six alternate sites were represented, but the longest exact
-match to either genome was only 150 bases. This does **not** demonstrate
+1% substitutions plus 1% indel events. A 1000x genome mixed with an unrelated
+50x genome produced three primary unitigs, with longest exact matches of
+995 and 895 bases, respectively. Two related genomes at 600x and 300x produced
+19 primary unitigs: all six alternate sites were represented, but the longest
+exact match to either genome was only 149 bases. This does **not** demonstrate
 strain phasing or superiority over other assemblers. Approximate-overlap and
 repeat-graph approaches, such as Flye's, are not implemented.
 
@@ -120,18 +124,15 @@ It reports primary and uncertain unitig counts, longest exact matches and
 recovery of strain-specific 21-mer positions. These k-mers can be scattered
 across unitigs and do **not** establish complete or correctly phased genomes.
 
-For these fixed synthetic seeds, `--min-count 10 --min-fraction 0.4` trades
-minority recovery for longer major-strain unitigs:
+For these fixed synthetic seeds, the defaults trade minority recovery for
+longer major-strain unitigs compared with `--min-count 3 --min-fraction 0.2`:
 
 | Divergence | Settings | Primary unitigs | Longest exact major unitig | Minor-specific 21-mer recovery |
 |---|---|---:|---:|---:|
-| 10% | defaults | 528 | 578 bp | 93.38% |
-| 10% | aggressive | 162 | 9,990 bp | 62.07% |
-| 5% | defaults | 674 | 267 bp | 86.70% |
-| 5% | aggressive | 78 | 9,987 bp | 25.81% |
+| 10% | less aggressive | 528 | 578 bp | 93.38% |
+| 10% | defaults | 162 | 9,990 bp | 62.07% |
+| 5% | less aggressive | 674 | 267 bp | 86.70% |
+| 5% | defaults | 78 | 9,987 bp | 25.81% |
 
-These settings are **not defaults**: an absolute count threshold of 10 can
-discard low-coverage organisms, and stronger relative filtering can erase
-real minority strains. Neither setting produces a complete minor-strain
-contig in this simulation. Real errors and population structure may behave
-very differently.
+Neither setting produces a complete minor-strain contig in this simulation.
+Real errors and population structure may behave very differently.

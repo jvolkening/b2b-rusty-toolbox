@@ -33,8 +33,8 @@ def main():
             reads.extend((">r" + str(i), "".join(sequence)))
         input_data = ("\n".join(reads) + "\n").encode()
         for mode, options in [
-            ("baseline", ["--no-clean-errors", "--min-fraction", "0.1"]),
-            ("bubbles", ["--no-clean-errors", "--min-fraction", "0.1", "--clean-bubbles"]),
+            ("baseline", ["--no-clean-errors", "--min-count", "3", "--min-fraction", "0.1"]),
+            ("bubbles", ["--no-clean-errors", "--min-count", "3", "--min-fraction", "0.1", "--clean-bubbles"]),
             ("clean-default", []),
             ("partitioned", []),
         ]:
