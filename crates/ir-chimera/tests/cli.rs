@@ -164,6 +164,124 @@ fn selects_reads_and_preserves_fastq_records() {
 }
 
 #[test]
+fn alignment_report_is_independent_of_output_mode_and_keeps_stdout_fastq() {
+    let report_path = temporary_path("alignments.txt");
+    let seq = hairpin(700);
+    let chimera = format!(
+        "@chimera description\n{}\n+chimera\n{}\n",
+        String::from_utf8_lossy(&seq),
+        "I".repeat(seq.len())
+    );
+    let normal = "@normal\nACGT\n+\nIIII\n";
+    let input = format!("{normal}{chimera}");
+    let mut previous_report = None;
+    for (mode, threads) in [(false, "1"), (true, "4")] {
+        let mut args = vec![
+            "--alignments",
+            report_path.to_str().unwrap(),
+            "--threads",
+            threads,
+        ];
+        if mode {
+            args.push("--chimeric");
+        }
+        let output = run(input.as_bytes(), &args);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            output.stdout,
+            if mode {
+                chimera.as_bytes()
+            } else {
+                normal.as_bytes()
+            }
+        );
+        let report = std::fs::read_to_string(&report_path).unwrap();
+        assert!(report.contains("Read: chimera description\nLength: 1400\n"));
+        assert!(!report.contains("Read: normal"));
+        assert!(
+            report.contains("Target (+): 1-700\nQuery (-): 1400-701\nIdentity: 700/700 (100.00%)")
+        );
+        assert!(report.contains(&format!(
+            "Target    1  {}  60",
+            String::from_utf8_lossy(&seq[..60])
+        )));
+        assert!(report.contains(&format!(
+            "Query  1400  {}  1341",
+            String::from_utf8_lossy(&seq[..60])
+        )));
+        if let Some(previous) = &previous_report {
+            assert_eq!(previous, &report);
+        }
+        previous_report = Some(report);
+        std::fs::remove_file(&report_path).unwrap();
+    }
+}
+
+#[test]
+fn alignment_report_handles_empty_inputs_and_path_errors() {
+    let path = temporary_path("alignments-empty.txt");
+    let output = run(
+        b">normal\nACGT\n",
+        &["--alignments", path.to_str().unwrap()],
+    );
+    assert!(output.status.success());
+    assert_eq!(std::fs::read(&path).unwrap(), b"");
+
+    let output = run(
+        b">normal\nACGT\n",
+        &["--alignments", path.to_str().unwrap()],
+    );
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("cannot create alignment report"));
+    assert_eq!(std::fs::read(&path).unwrap(), b"");
+    std::fs::remove_file(&path).unwrap();
+    let output = run(
+        b"",
+        &[
+            "--log",
+            path.to_str().unwrap(),
+            "--alignments",
+            path.to_str().unwrap(),
+        ],
+    );
+    assert!(!output.status.success());
+    assert!(!path.exists());
+}
+
+#[test]
+fn alignment_report_respects_fractional_threshold_and_logs() {
+    let path = temporary_path("fraction-alignments.txt");
+    let log = temporary_path("fraction-log.tsv");
+    let seq = hairpin(350);
+    let input = format!(">small\n{}\n>normal\nACGT\n", String::from_utf8_lossy(&seq));
+    let output = run(
+        input.as_bytes(),
+        &[
+            "--alignments",
+            path.to_str().unwrap(),
+            "--log",
+            log.to_str().unwrap(),
+            "--min-fraction",
+            "1",
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b">normal\nACGT\n");
+    let report = std::fs::read_to_string(&path).unwrap();
+    assert!(report.contains("Read: small\nLength: 700\nTarget (+): 1-350\nQuery (-): 700-351\nIdentity: 350/350 (100.00%)"));
+    assert_log(&log, 2, 1, 0.5);
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn fasta_length_and_identity_thresholds() {
     let seq = hairpin(700);
     let mut imperfect = seq.clone();
@@ -393,6 +511,8 @@ fn rejects_malformed_input_and_invalid_options() {
         &["--min-fraction", "inf"][..],
         &["--min-fraction"][..],
         &["--log", "--chimeric"][..],
+        &["--alignments"][..],
+        &["--alignments", "--chimeric"][..],
         &["--invalid"][..],
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_ir-chimera"))

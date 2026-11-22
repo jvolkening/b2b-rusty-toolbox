@@ -32,7 +32,7 @@ impl Default for Options {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct Arm {
     matches: usize,
     columns: usize,
@@ -128,10 +128,11 @@ fn has_inverted_seed(seq: &[u8]) -> bool {
     false
 }
 
-fn passing_alignment(seq: &[u8], mapping: &Mapping, options: Options) -> Result<bool> {
-    if mapping.strand != Strand::Reverse {
-        return Ok(false);
-    }
+fn alignment_columns(
+    seq: &[u8],
+    mapping: &Mapping,
+    mut visit: impl FnMut(usize, Option<usize>, Option<usize>, bool),
+) -> Result<()> {
     let cigar = mapping
         .alignment
         .as_ref()
@@ -139,8 +140,6 @@ fn passing_alignment(seq: &[u8], mapping: &Mapping, options: Options) -> Result<
         .ok_or("minimap2 returned an alignment without a CIGAR")?;
     let mut t = mapping.target_start as usize;
     let mut q = mapping.query_end as usize;
-    let mut arms = [Arm::default(), Arm::default()];
-
     // On a reverse alignment the query runs backwards. Split at the point
     // where its coordinates cross the target to exclude overlapping arms.
     for &(len, op) in cigar {
@@ -174,13 +173,38 @@ fn passing_alignment(seq: &[u8], mapping: &Mapping, options: Options) -> Result<
                 (Some(t), Some(q)) => complement(seq[q]) == Some(seq[t].to_ascii_uppercase()),
                 _ => false,
             };
-            arms[side].add(target, query, matches);
+            visit(side, target, query, matches);
         }
     }
-    Ok(arms.iter().any(|arm| arm.passes(options, seq.len())))
+    Ok(())
 }
 
-pub fn is_chimeric(seq: &[u8], options: Options) -> Result<bool> {
+fn passing_alignment(
+    seq: &[u8],
+    mapping: &Mapping,
+    options: Options,
+) -> Result<Option<(Arm, usize)>> {
+    if mapping.strand != Strand::Reverse {
+        return Ok(None);
+    }
+    let mut arms = [Arm::default(), Arm::default()];
+    alignment_columns(seq, mapping, |side, target, query, matches| {
+        arms[side].add(target, query, matches);
+    })?;
+    Ok(arms
+        .into_iter()
+        .enumerate()
+        .find(|(_, arm)| arm.passes(options, seq.len()))
+        .map(|(side, arm)| (arm, side)))
+}
+
+struct Hit {
+    mapping: Option<Mapping>,
+    arm: Arm,
+    side: usize,
+}
+
+fn find_chimera(seq: &[u8], options: Options, keep_alignment: bool) -> Result<Option<Hit>> {
     if seq.len() > i32::MAX as usize {
         return Err("sequence exceeds minimap2's length limit".into());
     }
@@ -217,7 +241,7 @@ pub fn is_chimeric(seq: &[u8], options: Options) -> Result<bool> {
     if (options.min_fraction.is_none() && seq.len() / 2 < options.min_length)
         || !has_inverted_seed(seq)
     {
-        return Ok(false);
+        return Ok(None);
     }
     let mut builder = Aligner::builder().ava_ont().with_cigar();
     builder.mapopt.flag |= ffi::MM_F_REV_ONLY as i64;
@@ -228,12 +252,97 @@ pub fn is_chimeric(seq: &[u8], options: Options) -> Result<bool> {
     let hits = aligner
         .map(seq, false, false, None, None, None)
         .map_err(|e| format!("mapping: {e}"))?;
-    for hit in &hits {
-        if passing_alignment(seq, hit, options)? {
-            return Ok(true);
+    for mapping in hits {
+        if let Some((arm, side)) = passing_alignment(seq, &mapping, options)? {
+            return Ok(Some(Hit {
+                mapping: keep_alignment.then_some(mapping),
+                arm,
+                side,
+            }));
         }
     }
-    Ok(false)
+    Ok(None)
+}
+
+pub fn is_chimeric(seq: &[u8], options: Options) -> Result<bool> {
+    Ok(find_chimera(seq, options, false)?.is_some())
+}
+
+fn display_complement(base: u8) -> u8 {
+    match base.to_ascii_uppercase() {
+        b'A' => b'T',
+        b'C' => b'G',
+        b'G' => b'C',
+        b'T' => b'A',
+        b'R' => b'Y',
+        b'Y' => b'R',
+        b'K' => b'M',
+        b'M' => b'K',
+        b'B' => b'V',
+        b'V' => b'B',
+        b'D' => b'H',
+        b'H' => b'D',
+        base => base,
+    }
+}
+
+fn write_alignment(writer: &mut dyn Write, id: &[u8], seq: &[u8], hit: &Hit) -> Result<()> {
+    let arm = &hit.arm;
+    writer.write_all(b"Read: ")?;
+    writer.write_all(id)?;
+    writeln!(
+        writer,
+        "\nLength: {}\nTarget (+): {}-{}\nQuery (-): {}-{}\nIdentity: {}/{} ({:.2}%)\n",
+        seq.len(),
+        arm.target_start + 1,
+        arm.target_end,
+        arm.query_end,
+        arm.query_start + 1,
+        arm.matches,
+        arm.columns,
+        100.0 * arm.matches as f64 / arm.columns as f64
+    )?;
+    let mut columns = Vec::with_capacity(arm.columns);
+    let mapping = hit.mapping.as_ref().ok_or("missing alignment for report")?;
+    alignment_columns(seq, mapping, |side, target, query, matches| {
+        if side == hit.side {
+            columns.push((target, query, matches));
+        }
+    })?;
+    let width = seq.len().to_string().len();
+    for chunk in columns.chunks(60) {
+        let mut target = String::with_capacity(chunk.len());
+        let mut query = String::with_capacity(chunk.len());
+        let mut markers = String::with_capacity(chunk.len());
+        let (mut t_first, mut t_last, mut q_first, mut q_last) = (None, None, None, None);
+        for &(t, q, matches) in chunk {
+            target.push(t.map_or('-', |pos| seq[pos].to_ascii_uppercase() as char));
+            query.push(q.map_or('-', |pos| display_complement(seq[pos]) as char));
+            markers.push(if matches { '|' } else { ' ' });
+            if let Some(pos) = t {
+                t_first.get_or_insert(pos + 1);
+                t_last = Some(pos + 1);
+            }
+            if let Some(pos) = q {
+                q_first.get_or_insert(pos + 1);
+                q_last = Some(pos + 1);
+            }
+        }
+        let coord = |value: Option<usize>| value.map_or_else(|| "-".to_owned(), |n| n.to_string());
+        writeln!(
+            writer,
+            "Target {:>width$}  {}  {}\n       {:>width$}  {}\nQuery  {:>width$}  {}  {}\n",
+            coord(t_first),
+            target,
+            coord(t_last),
+            "",
+            markers,
+            coord(q_first),
+            query,
+            coord(q_last),
+        )?;
+    }
+    Ok(())
 }
 
 struct Record {
@@ -248,17 +357,22 @@ fn write_batch<W: Write>(
     options: Options,
     pool: &rayon::ThreadPool,
     counts: &mut Counts,
+    report: &mut Option<&mut dyn Write>,
 ) -> Result<()> {
+    let keep_alignment = report.is_some();
     let results: Vec<_> = pool.install(|| {
         batch
             .par_iter()
-            .map(|record| is_chimeric(&record.sequence, options))
+            .map(|record| find_chimera(&record.sequence, options, keep_alignment))
             .collect()
     });
     for (record, result) in batch.iter().zip(results) {
-        let chimeric =
+        let hit =
             result.map_err(|e| format!("record {}: {e}", String::from_utf8_lossy(&record.id)))?;
-        if chimeric == options.chimeric {
+        if let (Some(hit), Some(report)) = (&hit, report.as_deref_mut()) {
+            write_alignment(report, &record.id, &record.sequence, hit)?;
+        }
+        if hit.is_some() == options.chimeric {
             writer.write_all(&record.raw)?;
             writer.write_all(b"\n")?;
             counts.n_kept += 1;
@@ -275,6 +389,7 @@ pub fn filter<R: BufRead + Send, W: Write>(
     pool: &rayon::ThreadPool,
     format: &mut Option<needletail::parser::Format>,
     counts: &mut Counts,
+    report: &mut Option<&mut dyn Write>,
 ) -> Result<()> {
     if reader.fill_buf()?.is_empty() {
         return Ok(());
@@ -310,11 +425,11 @@ pub fn filter<R: BufRead + Send, W: Write>(
             id: record.id().to_vec(),
         });
         if batch.len() >= batch_size || bytes >= 16 * 1024 * 1024 {
-            write_batch(&mut batch, writer, options, pool, counts)?;
+            write_batch(&mut batch, writer, options, pool, counts, report)?;
             bytes = 0;
         }
     }
-    write_batch(&mut batch, writer, options, pool, counts)?;
+    write_batch(&mut batch, writer, options, pool, counts, report)?;
     Ok(())
 }
 
@@ -346,14 +461,30 @@ mod tests {
             min_identity: 1.0,
             chimeric: true,
         };
-        assert!(passing_alignment(&seq, &mapping, options).unwrap());
+        assert!(
+            passing_alignment(&seq, &mapping, options)
+                .unwrap()
+                .is_some()
+        );
         options.min_length = 601;
-        assert!(!passing_alignment(&seq, &mapping, options).unwrap());
+        assert!(
+            passing_alignment(&seq, &mapping, options)
+                .unwrap()
+                .is_none()
+        );
         options.min_length = 600;
         seq[0] = b'C';
-        assert!(!passing_alignment(&seq, &mapping, options).unwrap());
+        assert!(
+            passing_alignment(&seq, &mapping, options)
+                .unwrap()
+                .is_none()
+        );
         options.min_identity = 0.99;
-        assert!(passing_alignment(&seq, &mapping, options).unwrap());
+        assert!(
+            passing_alignment(&seq, &mapping, options)
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[test]
@@ -449,15 +580,177 @@ mod tests {
             min_identity: 9.0 / 11.0,
             chimeric: true,
         };
-        assert!(passing_alignment(&seq, &mapping, options).unwrap());
+        assert!(
+            passing_alignment(&seq, &mapping, options)
+                .unwrap()
+                .is_some()
+        );
         options.min_identity = 9.01 / 11.0;
-        assert!(!passing_alignment(&seq, &mapping, options).unwrap());
+        assert!(
+            passing_alignment(&seq, &mapping, options)
+                .unwrap()
+                .is_none()
+        );
         options.min_identity = 9.0 / 11.0;
         seq[0] = b'N';
-        assert!(!passing_alignment(&seq, &mapping, options).unwrap());
+        assert!(
+            passing_alignment(&seq, &mapping, options)
+                .unwrap()
+                .is_none()
+        );
         options.min_identity = 8.0 / 11.0;
-        assert!(passing_alignment(&seq, &mapping, options).unwrap());
+        assert!(
+            passing_alignment(&seq, &mapping, options)
+                .unwrap()
+                .is_some()
+        );
         options.min_length = 11;
-        assert!(!passing_alignment(&seq, &mapping, options).unwrap());
+        assert!(
+            passing_alignment(&seq, &mapping, options)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn report_shows_gaps_mismatches_and_reverse_coordinates() {
+        let seq = b"AAAACCCCGGNNNNNNNNNNCCGGGCTTTT";
+        let mapping = Mapping {
+            strand: Strand::Reverse,
+            query_end: seq.len() as i32,
+            alignment: Some(Alignment {
+                nm: 2,
+                cigar: Some(vec![(4, 0), (1, 1), (3, 0), (1, 2), (2, 0)]),
+                cigar_str: None,
+                md: None,
+                cs: None,
+                alignment_score: None,
+            }),
+            ..Mapping::default()
+        };
+        let options = Options {
+            min_length: 10,
+            min_identity: 0.8,
+            ..Options::default()
+        };
+        let (arm, side) = passing_alignment(seq, &mapping, options).unwrap().unwrap();
+        let mut out = Vec::new();
+        write_alignment(
+            &mut out,
+            b"example",
+            seq,
+            &Hit {
+                mapping: Some(mapping),
+                arm,
+                side,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            "Read: example\nLength: 30\nTarget (+): 1-10\nQuery (-): 30-21\nIdentity: 9/11 (81.82%)\n\n\
+             Target  1  AAAA-CCCCGG  10\n           |||| ||| ||\nQuery  30  AAAAGCCC-GG  21\n\n"
+        );
+    }
+
+    #[test]
+    fn report_splits_diagonal_and_wraps_at_sixty_columns() {
+        let mut seq = vec![b'A'; 61];
+        seq.extend(vec![b'T'; 61]);
+        let mapping = Mapping {
+            strand: Strand::Reverse,
+            query_end: 122,
+            alignment: Some(Alignment {
+                nm: 0,
+                cigar: Some(vec![(122, 0)]),
+                cigar_str: None,
+                md: None,
+                cs: None,
+                alignment_score: None,
+            }),
+            ..Mapping::default()
+        };
+        let options = Options {
+            min_length: 61,
+            ..Options::default()
+        };
+        let (arm, side) = passing_alignment(&seq, &mapping, options).unwrap().unwrap();
+        let mut out = Vec::new();
+        write_alignment(
+            &mut out,
+            b"hairpin",
+            &seq,
+            &Hit {
+                mapping: Some(mapping),
+                arm,
+                side,
+            },
+        )
+        .unwrap();
+        let report = String::from_utf8(out).unwrap();
+        assert!(report.contains("Target (+): 1-61\nQuery (-): 122-62\nIdentity: 61/61 (100.00%)"));
+        assert!(report.contains(&format!("Target   1  {}  60", "A".repeat(60))));
+        assert!(report.contains(&format!("Query  122  {}  63", "A".repeat(60))));
+        assert!(report.contains("Target  61  A  61\n            |\nQuery   62  A  62\n"));
+    }
+
+    #[test]
+    fn report_displays_iupac_reverse_complements() {
+        assert_eq!(
+            b"ACGTRYSWKMBDHVN"
+                .iter()
+                .map(|&b| display_complement(b))
+                .collect::<Vec<_>>(),
+            b"TGCAYRSWMKVHDBN"
+        );
+    }
+
+    #[test]
+    fn report_handles_the_other_diagonal_side_and_write_errors() {
+        let mut seq = vec![b'A'; 61];
+        seq.extend(vec![b'T'; 61]);
+        let mapping = Mapping {
+            strand: Strand::Reverse,
+            query_end: 122,
+            alignment: Some(Alignment {
+                nm: 0,
+                cigar: Some(vec![(122, 0)]),
+                cigar_str: None,
+                md: None,
+                cs: None,
+                alignment_score: None,
+            }),
+            ..Mapping::default()
+        };
+        let mut arm = Arm::default();
+        alignment_columns(&seq, &mapping, |side, target, query, matches| {
+            if side == 1 {
+                arm.add(target, query, matches);
+            }
+        })
+        .unwrap();
+        let hit = Hit {
+            mapping: Some(mapping),
+            arm,
+            side: 1,
+        };
+        let mut out = Vec::new();
+        write_alignment(&mut out, b"example", &seq, &hit).unwrap();
+        let report = String::from_utf8(out).unwrap();
+        assert!(report.contains("Target (+): 62-122\nQuery (-): 61-1\nIdentity: 61/61 (100.00%)"));
+        assert!(report.contains("Target  62  "));
+        assert!(report.contains("Query   61  "));
+
+        struct BrokenWriter;
+        impl Write for BrokenWriter {
+            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("report write failed"))
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let error = write_alignment(&mut BrokenWriter, b"example", &seq, &hit).unwrap_err();
+        assert!(error.to_string().contains("report write failed"));
     }
 }

@@ -19,8 +19,11 @@ More documentation may come at some point. For now, consider this a personal Rus
   target/release/ir-chimera reads.fastq.gz > nonchimeric.fastq
   target/release/ir-chimera --chimeric --min-length 1000 --min-identity 85 reads.fasta > chimeric.fasta
   target/release/ir-chimera --min-fraction 0.6 reads.fastq.gz > nonchimeric.fastq
+  target/release/ir-chimera --alignments chimeras.txt reads.fastq.gz > nonchimeric.fastq
   ```
 
   Input can also be piped on stdin or supplied as multiple plain or gzip-compressed files of the same format. FASTQ must use four lines per record; output preserves the input record format, headers, sequences, and qualities. Reads are processed in bounded batches in input order; `--threads` controls worker count (by default, available CPUs up to 8). Building requires a C compiler and zlib development libraries.
 
   Use `--log summary.tsv` to write a two-line tab-delimited summary after successful processing. Its columns are `n_total`, `n_kept`, and `fraction` (reads written divided by reads consumed, or 0.0 for empty input). Counts include all input files and reflect the selected output mode. The log file must not already exist, to avoid overwriting input or other files.
+
+  Use `--alignments alignments.txt` to write one qualifying alignment for every detected chimeric read, independently of whether `--chimeric` is selected. Normal FASTA/FASTQ output still goes to stdout. The report shows only the non-overlapping portion used for classification, in 60-column blocks with 1-based inclusive read coordinates. The target is shown in the forward orientation, and the query is reverse-complemented with decreasing coordinates. `|` marks exact A/C/G/T matches, spaces indicate mismatches or ambiguous bases, and `-` indicates a gap. Identity includes gaps and ambiguous bases. The report file must not already exist and may be partial if processing fails. Only the first qualifying alignment is reported, not necessarily the best or all possible alignments.
