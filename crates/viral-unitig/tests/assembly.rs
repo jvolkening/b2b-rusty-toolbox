@@ -182,22 +182,31 @@ fn saves_ambiguous_similar_fragment_when_requested() {
     for pos in [8, 14] {
         short[pos] = if short[pos] == b'A' { b'C' } else { b'A' };
     }
-    let mut assembler = Assembler::new(Options {
-        min_count: 3,
-        ..Options::default()
-    })
-    .unwrap();
-    for _ in 0..100 {
-        assembler.add_read(&genome).unwrap();
-    }
-    for _ in 0..4 {
-        assembler.add_read(&short).unwrap();
-    }
-    let mut output = Vec::new();
-    let mut uncertain = Vec::new();
-    let stats = assembler
-        .write_unitigs_with_uncertain(&mut output, Some(&mut uncertain))
+    let run = |threads| {
+        let mut assembler = Assembler::new(Options {
+            min_count: 3,
+            threads,
+            ..Options::default()
+        })
         .unwrap();
+        for _ in 0..100 {
+            assembler.add_read(&genome).unwrap();
+        }
+        for _ in 0..4 {
+            assembler.add_read(&short).unwrap();
+        }
+        let mut output = Vec::new();
+        let mut uncertain = Vec::new();
+        let stats = assembler
+            .write_unitigs_with_uncertain(&mut output, Some(&mut uncertain))
+            .unwrap();
+        (output, uncertain, stats)
+    };
+    let (output, uncertain, stats) = run(1);
+    let (parallel_output, parallel_uncertain, parallel_stats) = run(4);
+    assert_eq!(output, parallel_output);
+    assert_eq!(uncertain, parallel_uncertain);
+    assert_eq!(stats, parallel_stats);
     assert!(contains_either_strand(&sequences(&output), &genome));
     assert!(contains_either_strand(&sequences(&uncertain), &short));
     assert!(stats.separated_uncertain_unitigs > 0);
@@ -383,7 +392,27 @@ fn assembles_noisy_short_reads_at_high_depth() {
         }
         reads.push(read);
     }
-    let output = assemble(&reads, Options::default());
+    let assemble_with_threads = |threads| {
+        let mut assembler = Assembler::new(Options {
+            threads,
+            ..Options::default()
+        })
+        .unwrap();
+        for read in &reads {
+            assembler.add_read(read).unwrap();
+        }
+        let mut primary = Vec::new();
+        let mut uncertain = Vec::new();
+        let stats = assembler
+            .write_unitigs_with_uncertain(&mut primary, Some(&mut uncertain))
+            .unwrap();
+        (primary, uncertain, stats)
+    };
+    let single = assemble_with_threads(1);
+    let parallel = assemble_with_threads(4);
+    assert_eq!(single, parallel);
+    assert!(single.2.removed_error_kmers > 0);
+    let output = sequences(&single.0);
     assert_eq!(output.len(), 1, "unitigs: {}", output.len());
     let longest_exact = output
         .iter()
@@ -399,6 +428,16 @@ fn assembles_noisy_short_reads_at_high_depth() {
         longest_exact >= 1000,
         "longest exact unitig: {longest_exact}"
     );
+}
+
+#[test]
+fn cli_rejects_zero_threads() {
+    let output = Command::new(env!("CARGO_BIN_EXE_viral-unitig"))
+        .args(["--threads", "0"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("threads must be positive"));
 }
 
 #[test]

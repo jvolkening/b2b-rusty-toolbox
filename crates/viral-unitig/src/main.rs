@@ -22,6 +22,7 @@ OPTIONS:
     --uncertain <FILE>       Save short, possibly redundant unitigs separately
     --min-length <N>         Minimum emitted unitig length [default: k]
     --max-kmers <N>          Maximum distinct input k-mers [default: 10000000]
+    -t, --threads <N>        Worker threads [default: available CPUs, up to 8]
     -h, --help               Print help
 
 Research prototype: emits unphased unitigs, not complete viral genomes.
@@ -43,7 +44,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             "--clean-errors" => options.clean_errors = true,
             "--no-clean-errors" => options.clean_errors = false,
             "-k" | "--kmer" | "--min-count" | "--min-fraction" | "--min-length" | "--max-kmers"
-            | "--uncertain" => {
+            | "-t" | "--threads" | "--uncertain" => {
                 let value = args
                     .next()
                     .ok_or_else(|| format!("{arg} requires a value"))?;
@@ -53,6 +54,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     "--min-fraction" => options.min_fraction = value.parse()?,
                     "--min-length" => options.min_length = value.parse()?,
                     "--max-kmers" => options.max_kmers = value.parse()?,
+                    "-t" | "--threads" => options.threads = value.parse()?,
                     "--uncertain" => {
                         if uncertain_path.replace(value).is_some() {
                             return Err("--uncertain may only be specified once".into());
