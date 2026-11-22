@@ -25,6 +25,14 @@ combined, and FASTQ qualities are checked for format but not used in assembly.
 Input can be wrapped FASTA or FASTQ, but gzip must be decompressed externally.
 For available settings, run `viral-unitig --help`.
 
+The error-k-mer searches and short-unitig redundancy checks use worker
+threads; reading and counting k-mers, graph construction, traversal, and
+output remain serial. By default the worker pool uses the available CPU
+count, capped at 8. Use `--threads N` (or `-t N`) to set a positive thread
+count, including `--threads 1` for a single worker. More workers can increase
+memory consumption, particularly when checking short unitigs. Speedup depends
+on the dataset and on the time spent in the parallel stages.
+
 The minimum branch support is the k-mer count divided by the highest k-mer
 count at each of its two junctions, calculated before filtering. It removes
 an edge if it falls below the threshold at either junction. This can suppress
@@ -74,7 +82,7 @@ fragment assemblies or produce misleading paths. Circular paths are marked
 consensus polishing, base-quality filtering, host-read removal, error model,
 coverage normalization, graph export or long-read scaffolding.
 
-This single-threaded in-memory prototype keeps even singleton k-mers until
+This in-memory prototype keeps even singleton k-mers until
 input has been counted. `--max-kmers` limits distinct k-mers and fails instead
 of silently discarding them; it is **not a memory limit**. Graph construction
 uses additional memory. Neighbor searches and buffering short unitigs can be

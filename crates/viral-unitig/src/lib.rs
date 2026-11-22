@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::io::{self, BufRead, Write};
 
+use rayon::prelude::*;
+
 #[derive(Clone, Copy, Debug)]
 pub struct Options {
     pub k: usize,
@@ -8,6 +10,7 @@ pub struct Options {
     pub min_fraction: f64,
     pub min_length: usize,
     pub max_kmers: usize,
+    pub threads: usize,
     pub clean_bubbles: bool,
     pub clean_errors: bool,
 }
@@ -20,6 +23,9 @@ impl Default for Options {
             min_fraction: 0.4,
             min_length: 0,
             max_kmers: 10_000_000,
+            threads: std::thread::available_parallelism()
+                .map_or(1, usize::from)
+                .min(8),
             clean_bubbles: false,
             clean_errors: true,
         }
@@ -40,7 +46,7 @@ struct Node {
     outgoing: u8,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, PartialEq, Eq)]
 pub struct AssemblyStats {
     pub unitigs: usize,
     pub removed_bubble_paths: usize,
@@ -54,6 +60,7 @@ pub struct AssemblyStats {
 pub struct Assembler {
     options: Options,
     edges: HashMap<u64, Edge>,
+    pool: rayon::ThreadPool,
     pub reads: u64,
     pub bases: u64,
 }
@@ -171,15 +178,20 @@ impl Assembler {
         if !(15..=31).contains(&options.k) || options.k.is_multiple_of(2) {
             return Err(invalid("k must be an odd number between 15 and 31"));
         }
-        if options.min_count == 0 || options.max_kmers == 0 {
-            return Err(invalid("min-count and max-kmers must be positive"));
+        if options.min_count == 0 || options.max_kmers == 0 || options.threads == 0 {
+            return Err(invalid("min-count, max-kmers and threads must be positive"));
         }
         if !options.min_fraction.is_finite() || !(0.0..1.0).contains(&options.min_fraction) {
             return Err(invalid("min-fraction must be at least 0 and less than 1"));
         }
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(options.threads)
+            .build()
+            .map_err(|error| io::Error::other(format!("cannot create thread pool: {error}")))?;
         Ok(Self {
             options,
             edges: HashMap::new(),
+            pool,
             reads: 0,
             bases: 0,
         })
@@ -386,8 +398,13 @@ impl Assembler {
                 }
             }
         }
-        for sequence in short_unitigs {
-            let (redundant, exhausted) = self.redundant_unitig(&sequence);
+        let redundancy = self.pool.install(|| {
+            short_unitigs
+                .par_iter()
+                .map(|sequence| self.redundant_unitig(sequence))
+                .collect::<Vec<_>>()
+        });
+        for (sequence, (redundant, exhausted)) in short_unitigs.into_iter().zip(redundancy) {
             stats.redundancy_search_limit += usize::from(exhausted);
             if redundant {
                 if let Some(output) = uncertain.as_mut() {
@@ -593,20 +610,25 @@ impl Assembler {
             .map(|edge| edge.count)
             .max()
             .unwrap_or(0);
-        let mut weak = HashMap::new();
-        for (&word, edge) in &self.edges {
-            if edge.count as f64 >= self.options.min_fraction * max_count as f64 {
-                continue;
-            }
-            let neighbor = if two_substitutions {
-                self.strongest_two_substitutions(word, edge.count)
-            } else {
-                self.strongest_similar_kmer(word, edge.count)
-            };
-            if let Some((neighbor, _)) = neighbor {
-                weak.insert(word, neighbor);
-            }
-        }
+        let candidates: Vec<_> = self
+            .edges
+            .iter()
+            .filter(|(_, edge)| (edge.count as f64) < self.options.min_fraction * max_count as f64)
+            .map(|(&word, edge)| (word, edge.count))
+            .collect();
+        let weak: HashMap<u64, u64> = self.pool.install(|| {
+            candidates
+                .par_iter()
+                .filter_map(|&(word, count)| {
+                    let neighbor = if two_substitutions {
+                        self.strongest_two_substitutions(word, count)
+                    } else {
+                        self.strongest_similar_kmer(word, count)
+                    };
+                    neighbor.map(|(neighbor, _)| (word, neighbor))
+                })
+                .collect()
+        });
         let removed: HashSet<u64> = weak
             .iter()
             .filter_map(|(&word, neighbor)| (!weak.contains_key(neighbor)).then_some(word))
