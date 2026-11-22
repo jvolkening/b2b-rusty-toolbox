@@ -200,11 +200,12 @@ fn alignment_report_is_independent_of_output_mode_and_keeps_stdout_fastq() {
             }
         );
         let report = std::fs::read_to_string(&report_path).unwrap();
-        assert!(report.contains("Read: chimera description\nLength: 1400\n"));
+        assert!(report.contains("Read: chimera\nLength: 1400\n"));
+        assert!(!report.contains("description"));
         assert!(!report.contains("Read: normal"));
-        assert!(
-            report.contains("Target (+): 1-700\nQuery (-): 1400-701\nIdentity: 700/700 (100.00%)")
-        );
+        assert!(report.contains("Identity: 700/700 (100.00%)"));
+        assert!(!report.contains("Target (+):"));
+        assert!(!report.contains("Query (-):"));
         assert!(report.contains(&format!(
             "Target    1  {}  60",
             String::from_utf8_lossy(&seq[..60])
@@ -276,7 +277,7 @@ fn alignment_report_respects_fractional_threshold_and_logs() {
     );
     assert_eq!(output.stdout, b">normal\nACGT\n");
     let report = std::fs::read_to_string(&path).unwrap();
-    assert!(report.contains("Read: small\nLength: 700\nTarget (+): 1-350\nQuery (-): 700-351\nIdentity: 350/350 (100.00%)"));
+    assert!(report.contains("Read: small\nLength: 700\nIdentity: 350/350 (100.00%)"));
     assert_log(&log, 2, 1, 0.5);
     std::fs::remove_file(path).unwrap();
 }

@@ -289,15 +289,15 @@ fn display_complement(base: u8) -> u8 {
 fn write_alignment(writer: &mut dyn Write, id: &[u8], seq: &[u8], hit: &Hit) -> Result<()> {
     let arm = &hit.arm;
     writer.write_all(b"Read: ")?;
-    writer.write_all(id)?;
+    let id_end = id
+        .iter()
+        .position(u8::is_ascii_whitespace)
+        .unwrap_or(id.len());
+    writer.write_all(&id[..id_end])?;
     writeln!(
         writer,
-        "\nLength: {}\nTarget (+): {}-{}\nQuery (-): {}-{}\nIdentity: {}/{} ({:.2}%)\n",
+        "\nLength: {}\nIdentity: {}/{} ({:.2}%)\n",
         seq.len(),
-        arm.target_start + 1,
-        arm.target_end,
-        arm.query_end,
-        arm.query_start + 1,
         arm.matches,
         arm.columns,
         100.0 * arm.matches as f64 / arm.columns as f64
@@ -637,7 +637,7 @@ mod tests {
         let mut out = Vec::new();
         write_alignment(
             &mut out,
-            b"example",
+            b"example\tdescription",
             seq,
             &Hit {
                 mapping: Some(mapping),
@@ -648,7 +648,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             String::from_utf8(out).unwrap(),
-            "Read: example\nLength: 30\nTarget (+): 1-10\nQuery (-): 30-21\nIdentity: 9/11 (81.82%)\n\n\
+            "Read: example\nLength: 30\nIdentity: 9/11 (81.82%)\n\n\
              Target  1  AAAA-CCCCGG  10\n           |||| ||| ||\nQuery  30  AAAAGCCC-GG  21\n\n"
         );
     }
@@ -688,7 +688,7 @@ mod tests {
         )
         .unwrap();
         let report = String::from_utf8(out).unwrap();
-        assert!(report.contains("Target (+): 1-61\nQuery (-): 122-62\nIdentity: 61/61 (100.00%)"));
+        assert!(report.contains("Length: 122\nIdentity: 61/61 (100.00%)"));
         assert!(report.contains(&format!("Target   1  {}  60", "A".repeat(60))));
         assert!(report.contains(&format!("Query  122  {}  63", "A".repeat(60))));
         assert!(report.contains("Target  61  A  61\n            |\nQuery   62  A  62\n"));
@@ -737,7 +737,7 @@ mod tests {
         let mut out = Vec::new();
         write_alignment(&mut out, b"example", &seq, &hit).unwrap();
         let report = String::from_utf8(out).unwrap();
-        assert!(report.contains("Target (+): 62-122\nQuery (-): 61-1\nIdentity: 61/61 (100.00%)"));
+        assert!(report.contains("Length: 122\nIdentity: 61/61 (100.00%)"));
         assert!(report.contains("Target  62  "));
         assert!(report.contains("Query   61  "));
 
