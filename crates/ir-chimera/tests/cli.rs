@@ -215,6 +215,103 @@ fn reads_wrapped_crlf_fasta_and_gzip() {
 }
 
 #[test]
+fn empty_and_concatenated_gzip_are_read_and_truncation_is_rejected() {
+    let gzip = |input: &[u8]| {
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(input).unwrap();
+        encoder.finish().unwrap()
+    };
+    let log = temporary_path("empty-gzip.tsv");
+    let output = run(&gzip(b""), &["--log", log.to_str().unwrap()]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stdout.is_empty());
+    assert_log(&log, 0, 0, 0.0);
+
+    let mut concatenated = gzip(b">first\nACGT\n");
+    concatenated.extend(gzip(b">second\nTGCA\n"));
+    let mut with_empty_member = gzip(b"");
+    with_empty_member.extend(&concatenated);
+    for data in [&concatenated, &with_empty_member] {
+        let output = run(data, &[]);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.stdout, b">first\nACGT\n>second\nTGCA\n");
+    }
+
+    for mut corrupt in [gzip(b""), gzip(b">read\nACGT\n")] {
+        corrupt.truncate(corrupt.len() - 3);
+        let output = run(&corrupt, &[]);
+        assert!(!output.status.success(), "truncated gzip was accepted");
+        assert!(!output.stderr.is_empty());
+    }
+}
+
+#[test]
+fn synthetic_reads_have_expected_calls_across_modes_and_threads() {
+    let path = temporary_path("synthetic.fa");
+    let mut input = Vec::new();
+    let mut expected = [Vec::new(), Vec::new()];
+    for i in 1..=16 {
+        let arm = dna(800, 0x5246 + i);
+        let mut mutated = revcomp(&arm);
+        for base in mutated.iter_mut().step_by(40) {
+            *base = if *base == b'A' { b'C' } else { b'A' };
+        }
+        mutated.remove(420);
+        let reads = [
+            ("random", dna(2000, 0xa420 + i), false),
+            (
+                "direct",
+                [arm.clone(), dna(200, 0x4490 + i), arm.clone()].concat(),
+                false,
+            ),
+            ("clean", [arm.clone(), revcomp(&arm)].concat(), true),
+            (
+                "noisy",
+                [
+                    dna(200, 0x1234 + i),
+                    arm.clone(),
+                    dna(200, 0x9876 + i),
+                    mutated,
+                ]
+                .concat(),
+                true,
+            ),
+        ];
+        for (kind, seq, chimeric) in reads {
+            let record = format!(">{kind}-{i}\n{}\n", String::from_utf8_lossy(&seq));
+            input.extend_from_slice(record.as_bytes());
+            expected[usize::from(chimeric)].extend_from_slice(record.as_bytes());
+        }
+    }
+    std::fs::write(&path, input).unwrap();
+    for threads in ["1", "4"] {
+        for chimeric in [false, true] {
+            let mut command = Command::new(env!("CARGO_BIN_EXE_ir-chimera"));
+            command.args(["--threads", threads]);
+            if chimeric {
+                command.arg("--chimeric");
+            }
+            let output = command.arg(&path).output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert_eq!(output.stdout, expected[usize::from(chimeric)]);
+        }
+    }
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn rejects_malformed_input_and_invalid_options() {
     for input in [
         b"@id\nACGT\n+\n!!!\n".as_slice(),
@@ -229,6 +326,7 @@ fn rejects_malformed_input_and_invalid_options() {
         &["--min-length", "0"][..],
         &["--min-identity", "NaN"][..],
         &["--min-identity", "101"][..],
+        &["--log", "--chimeric"][..],
         &["--invalid"][..],
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_ir-chimera"))

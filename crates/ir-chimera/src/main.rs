@@ -45,7 +45,11 @@ fn run() -> Result<()> {
                 if log.is_some() {
                     return Err("--log may only be specified once".into());
                 }
-                log = Some(args.next().ok_or("missing value for --log")?);
+                let path = args.next().ok_or("missing value for --log")?;
+                if path.starts_with('-') {
+                    return Err("invalid --log path; use ./ for names beginning with '-'".into());
+                }
+                log = Some(path);
             }
             "-l" | "--min-length" => {
                 let value = args.next().ok_or("missing value for --min-length")?;

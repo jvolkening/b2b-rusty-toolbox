@@ -178,7 +178,6 @@ checksum = "e7006e7818634c2f9d91cf2a763eb4c8b85389a817b814384c9ccccc951cd086"
 dependencies = [
  "buffer-redux",
  "bytecount",
- "flate2",
  "memchr",
 ]
 

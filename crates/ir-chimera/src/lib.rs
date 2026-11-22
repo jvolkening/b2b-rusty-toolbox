@@ -1,8 +1,9 @@
+use flate2::read::MultiGzDecoder;
 use minimap2::{Aligner, Mapping, Strand, ffi};
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::error::Error;
-use std::io::{BufRead, Write};
+use std::io::{BufRead, BufReader, Cursor, Read, Write};
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -265,7 +266,18 @@ pub fn filter<R: BufRead + Send, W: Write>(
     if reader.fill_buf()?.is_empty() {
         return Ok(());
     }
-    let mut records = needletail::parse_fastx_reader(reader)?;
+    let mut prefix = [0; 2];
+    reader.read_exact(&mut prefix)?;
+    let input = Cursor::new(prefix).chain(reader);
+    let mut input: Box<dyn BufRead + Send + '_> = if prefix == [0x1f, 0x8b] {
+        Box::new(BufReader::new(MultiGzDecoder::new(input)))
+    } else {
+        Box::new(BufReader::new(input))
+    };
+    if input.fill_buf()?.is_empty() {
+        return Ok(());
+    }
+    let mut records = needletail::parse_fastx_reader(input)?;
     let batch_size = pool.current_num_threads().saturating_mul(8).clamp(1, 256);
     let mut batch = Vec::with_capacity(batch_size);
     let mut bytes = 0usize;
@@ -336,5 +348,69 @@ mod tests {
         assert!(!has_inverted_seed(b"AAAAAAAAAAAAAAANNN"));
         assert!(has_inverted_seed(b"AAAAAAAAAAAAAAANNTTTTTTTTTTTTTTT"));
         assert!(has_inverted_seed(b"aaaaaaaaaaaaaaannTTTTTTTTTTTTTTT"));
+    }
+
+    #[test]
+    fn inverted_seed_matches_brute_force_search() {
+        fn brute(seq: &[u8]) -> bool {
+            const K: usize = 15;
+            seq.windows(K).enumerate().any(|(i, a)| {
+                seq.windows(K).skip(i + K).any(|b| {
+                    a.iter()
+                        .zip(b.iter().rev())
+                        .all(|(&x, &y)| complement(x).is_some_and(|c| c == y.to_ascii_uppercase()))
+                })
+            })
+        }
+
+        let mut state = 0x12345678u64;
+        for case in 0..300 {
+            let mut seq = Vec::new();
+            for _ in 0..case % 120 {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                seq.push(b"ACGTNacgt"[(state as usize) % 9]);
+            }
+            if case % 3 == 0 {
+                let seed = b"ACGTTAGCCGATACG";
+                seq.extend(seed);
+                seq.extend(seed.iter().rev().map(|&b| complement(b).unwrap()));
+            }
+            assert_eq!(has_inverted_seed(&seq), brute(&seq), "case {case}");
+        }
+    }
+
+    #[test]
+    fn identity_includes_insertions_deletions_and_ambiguous_bases() {
+        let mut seq = b"AAAACCCCGGNNNNNNNNNNCCGGGCTTTT".to_vec();
+        let mapping = Mapping {
+            strand: Strand::Reverse,
+            query_end: seq.len() as i32,
+            alignment: Some(Alignment {
+                nm: 2,
+                cigar: Some(vec![(4, 0), (1, 1), (3, 0), (1, 2), (2, 0)]),
+                cigar_str: None,
+                md: None,
+                cs: None,
+                alignment_score: None,
+            }),
+            ..Mapping::default()
+        };
+        let mut options = Options {
+            min_length: 10,
+            min_identity: 9.0 / 11.0,
+            chimeric: true,
+        };
+        assert!(passing_alignment(&seq, &mapping, options).unwrap());
+        options.min_identity = 9.01 / 11.0;
+        assert!(!passing_alignment(&seq, &mapping, options).unwrap());
+        options.min_identity = 9.0 / 11.0;
+        seq[0] = b'N';
+        assert!(!passing_alignment(&seq, &mapping, options).unwrap());
+        options.min_identity = 8.0 / 11.0;
+        assert!(passing_alignment(&seq, &mapping, options).unwrap());
+        options.min_length = 11;
+        assert!(!passing_alignment(&seq, &mapping, options).unwrap());
     }
 }
