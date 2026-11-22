@@ -8,6 +8,10 @@ For now, consider this a personal Rust playground.
 
 ## Tools
 
+### `viral-unitig`
+
+Experimental coverage-aware unitigger for metagenomic reads. See [its documentation](crates/viral-unitig/README.md) for limitations.
+
 ### `n-every`
 
 Insert an `N` after every K bases in FASTA input. See `n-every --help`.
