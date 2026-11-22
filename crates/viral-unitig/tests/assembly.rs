@@ -84,6 +84,28 @@ fn assembles_short_overlapping_reads_from_both_strands() {
 }
 
 #[test]
+fn header_reports_mean_kmer_depth_for_uneven_read_support() {
+    let genome = reference(30);
+    let mut assembler = Assembler::new(Options::default()).unwrap();
+    for _ in 0..5 {
+        assembler.add_read(&genome).unwrap();
+        assembler.add_read(&reverse_complement(&genome)).unwrap();
+    }
+    for _ in 0..10 {
+        assembler.add_read(&genome[..21]).unwrap();
+    }
+    let mut output = Vec::new();
+    let stats = assembler.write_unitigs(&mut output).unwrap();
+    assert_eq!(stats.unitigs, 1);
+    let header = std::str::from_utf8(&output)
+        .unwrap()
+        .lines()
+        .next()
+        .unwrap();
+    assert!(header.contains("mean_kmer_depth=11.00"), "{header}");
+}
+
+#[test]
 fn retains_branches_for_two_supported_alleles() {
     let genome = reference(400);
     let mut variant = genome.clone();
@@ -209,6 +231,18 @@ fn saves_ambiguous_similar_fragment_when_requested() {
     assert_eq!(stats, parallel_stats);
     assert!(contains_either_strand(&sequences(&output), &genome));
     assert!(contains_either_strand(&sequences(&uncertain), &short));
+    let uncertain_text = std::str::from_utf8(&uncertain).unwrap();
+    let matching_record = uncertain_text
+        .split('>')
+        .find(|record| contains_either_strand(&sequences(format!(">{record}").as_bytes()), &short))
+        .unwrap();
+    assert!(
+        matching_record
+            .lines()
+            .next()
+            .unwrap()
+            .contains("mean_kmer_depth=4.00")
+    );
     assert!(stats.separated_uncertain_unitigs > 0);
     assert_eq!(stats.discarded_uncertain_unitigs, 0);
 }
@@ -322,7 +356,9 @@ fn circular_unitig_is_marked_and_contains_its_overlap() {
     }
     let mut output = Vec::new();
     assembler.write_unitigs(&mut output).unwrap();
-    assert!(String::from_utf8_lossy(&output).contains("circular=true"));
+    let text = String::from_utf8_lossy(&output);
+    assert!(text.contains("circular=true"));
+    assert!(text.contains("mean_kmer_depth=10.00"));
     let seqs = sequences(&output);
     assert_eq!(seqs.len(), 1);
     assert_eq!(seqs[0].len(), genome.len() + 20);
@@ -554,4 +590,6 @@ fn cli_writes_uncertain_fragments_separately() {
     assert!(result.status.success());
     assert!(contains_either_strand(&sequences(&result.stdout), &genome));
     assert!(contains_either_strand(&sequences(&uncertain), &short));
+    assert!(String::from_utf8_lossy(&result.stdout).contains("mean_kmer_depth=100.00"));
+    assert!(String::from_utf8_lossy(&uncertain).contains("mean_kmer_depth=10.00"));
 }

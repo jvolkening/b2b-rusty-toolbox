@@ -46,6 +46,12 @@ struct Node {
     outgoing: u8,
 }
 
+struct Unitig {
+    sequence: Vec<u8>,
+    circular: bool,
+    kmer_count_sum: u128,
+}
+
 #[derive(Default, Debug, PartialEq, Eq)]
 pub struct AssemblyStats {
     pub unitigs: usize,
@@ -128,19 +134,21 @@ fn for_each_one_error_neighbor(word: u64, k: usize, mut visit: impl FnMut(u64)) 
 
 fn write_record<W: Write>(
     writer: &mut W,
-    sequence: &[u8],
-    circular: bool,
+    unitig: &Unitig,
+    k: usize,
     prefix: &str,
     count: &mut usize,
 ) -> io::Result<()> {
     *count += 1;
+    let mean_kmer_depth = unitig.kmer_count_sum as f64 / (unitig.sequence.len() - k + 1) as f64;
     writeln!(
         writer,
-        ">{prefix}_{} length={} circular={circular}",
+        ">{prefix}_{} length={} circular={} mean_kmer_depth={mean_kmer_depth:.2}",
         *count,
-        sequence.len()
+        unitig.sequence.len(),
+        unitig.circular,
     )?;
-    for chunk in sequence.chunks(80) {
+    for chunk in unitig.sequence.chunks(80) {
         writer.write_all(chunk)?;
         writer.write_all(b"\n")?;
     }
@@ -380,20 +388,17 @@ impl Assembler {
                     if self.edges[&word].visited {
                         continue;
                     }
-                    let (sequence, circular) = self.walk(oriented, &graph);
-                    if sequence.len() < self.options.min_length {
+                    let unitig = self.walk(oriented, &graph);
+                    if unitig.sequence.len() < self.options.min_length {
                         continue;
                     }
-                    if self.options.clean_errors && !circular && sequence.len() <= 2 * k + 2 {
-                        short_unitigs.push(sequence);
+                    if self.options.clean_errors
+                        && !unitig.circular
+                        && unitig.sequence.len() <= 2 * k + 2
+                    {
+                        short_unitigs.push(unitig);
                     } else {
-                        write_record(
-                            &mut writer,
-                            &sequence,
-                            circular,
-                            "unitig",
-                            &mut stats.unitigs,
-                        )?;
+                        write_record(&mut writer, &unitig, k, "unitig", &mut stats.unitigs)?;
                     }
                 }
             }
@@ -401,17 +406,17 @@ impl Assembler {
         let redundancy = self.pool.install(|| {
             short_unitigs
                 .par_iter()
-                .map(|sequence| self.redundant_unitig(sequence))
+                .map(|unitig| self.redundant_unitig(&unitig.sequence))
                 .collect::<Vec<_>>()
         });
-        for (sequence, (redundant, exhausted)) in short_unitigs.into_iter().zip(redundancy) {
+        for (unitig, (redundant, exhausted)) in short_unitigs.into_iter().zip(redundancy) {
             stats.redundancy_search_limit += usize::from(exhausted);
             if redundant {
                 if let Some(output) = uncertain.as_mut() {
                     write_record(
                         output,
-                        &sequence,
-                        false,
+                        &unitig,
+                        k,
                         "uncertain",
                         &mut stats.separated_uncertain_unitigs,
                     )?;
@@ -419,7 +424,7 @@ impl Assembler {
                     stats.discarded_uncertain_unitigs += 1;
                 }
             } else {
-                write_record(&mut writer, &sequence, false, "unitig", &mut stats.unitigs)?;
+                write_record(&mut writer, &unitig, k, "unitig", &mut stats.unitigs)?;
             }
         }
         writer.flush()?;
@@ -813,18 +818,24 @@ impl Assembler {
         Some(path)
     }
 
-    fn walk(&mut self, first: u64, graph: &HashMap<u64, Node>) -> (Vec<u8>, bool) {
+    fn walk(&mut self, first: u64, graph: &HashMap<u64, Node>) -> Unitig {
         let k = self.options.k;
         let (start, _) = nodes(first, k);
         let mut word = first;
         let mut sequence = Vec::new();
         decode(word, k, &mut sequence);
-        self.edges.get_mut(&canonical(word, k)).unwrap().visited = true;
+        let edge = self.edges.get_mut(&canonical(word, k)).unwrap();
+        edge.visited = true;
+        let mut kmer_count_sum = u128::from(edge.count);
         loop {
             let (_, to) = nodes(word, k);
             let node = &graph[&to];
             if node.incoming != 1 || node.outgoing != 1 {
-                return (sequence, false);
+                return Unitig {
+                    sequence,
+                    circular: false,
+                    kmer_count_sum,
+                };
             }
             let next = (0..4)
                 .map(|base| (to << 2) | base)
@@ -832,9 +843,14 @@ impl Assembler {
                 .expect("graph degree must match edges");
             let edge = self.edges.get_mut(&canonical(next, k)).unwrap();
             if edge.visited {
-                return (sequence, to == start);
+                return Unitig {
+                    sequence,
+                    circular: to == start,
+                    kmer_count_sum,
+                };
             }
             edge.visited = true;
+            kmer_count_sum += u128::from(edge.count);
             sequence.push(b"ACGT"[(next & 3) as usize]);
             word = next;
         }
