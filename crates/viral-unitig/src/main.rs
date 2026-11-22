@@ -16,6 +16,7 @@ OPTIONS:
     -k, --kmer <ODD>         k-mer size, 15 to 31 [default: 21]
     --min-count <N>          Minimum k-mer occurrences [default: 3]
     --min-fraction <F>       Minimum local branch support, 0 <= F < 1 [default: 0.1]
+    --clean-bubbles          Experimentally remove weak, similar bubble paths
     --min-length <N>         Minimum emitted unitig length [default: k]
     --max-kmers <N>          Maximum distinct input k-mers [default: 10000000]
     -h, --help               Print help
@@ -34,6 +35,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 print!("{HELP}");
                 return Ok(());
             }
+            "--clean-bubbles" => options.clean_bubbles = true,
             "-k" | "--kmer" | "--min-count" | "--min-fraction" | "--min-length" | "--max-kmers" => {
                 let value = args
                     .next()
@@ -71,12 +73,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let stdout = io::stdout();
     let (reads, bases) = (assembler.reads, assembler.bases);
-    let count = assembler.write_unitigs(BufWriter::with_capacity(256 * 1024, stdout.lock()))?;
+    let stats = assembler.write_unitigs(BufWriter::with_capacity(256 * 1024, stdout.lock()))?;
     eprintln!(
-        "processed {} reads, {} bases; wrote {} unitigs",
-        reads, bases, count
+        "processed {} reads, {} bases; wrote {} unitigs; removed {} weak bubble paths ({} k-mers)",
+        reads, bases, stats.unitigs, stats.removed_bubble_paths, stats.removed_bubble_kmers
     );
-    if count == 0 {
+    if stats.unitigs == 0 {
         eprintln!("warning: no unitigs passed the filters");
     }
     Ok(())

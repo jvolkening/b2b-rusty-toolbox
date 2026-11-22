@@ -30,6 +30,21 @@ at the cost of more sequencing-error branches. `--min-count` similarly trades
 low-coverage recovery against error suppression. K-mer counts count
 occurrences, not independent reads; repeats can inflate support.
 
+`--clean-bubbles` enables an additional **experimental, opt-in** cleanup.
+Before edge filtering, it looks for short unbranched weak paths that diverge
+and rejoin a stronger path, and removes the entire weak path if its maximum
+k-mer count is below `--min-fraction` times the stronger path's minimum count.
+The stronger path is followed greedily; paths are limited to `2*k+2` edges and
+must differ by at most two edits. Counts of removed paths and k-mers are
+reported on stderr. Incomplete bubbles and unanchored fragments are left alone.
+
+This evidence cannot distinguish an error from a true low-frequency strain
+or related virus: the option can eliminate real variation. It does not use
+read linkage or base qualities. Disabling it retains weak bubble interiors,
+but the ordinary relative-support filter may still break those paths. To
+retain relative-support alternatives for investigation, use
+`--min-fraction 0`; the absolute `--min-count` filter still applies.
+
 Unitigs stop at branches. Alternative alleles are **not phased into complete
 strain contigs**, and individual unitigs are not assigned to organisms.
 Different strains, repeats, sequencing errors and related species can all
@@ -58,12 +73,14 @@ python3 crates/viral-unitig/benchmarks/synthetic.py target/release/viral-unitig
 This simulates a single random 3 kb sequence, uniformly sampled 250-base
 fragments, and independent uniform substitutions, insertions and deletions.
 It reports nominal depth, unitig count and the longest unitig exactly matching
-the reference on either strand. It does not model nanopore error distributions,
-repeats, mixed infections, bacterial reads, or large datasets.
+the reference on either strand, both with and without bubble cleanup. It does
+not model nanopore error distributions, repeats, mixed infections, bacterial
+reads, or large datasets.
 
-For example, one run at 100x nominal depth with 2% substitutions and 2% indel
-events produced 449 unitigs and a longest exact unitig of 219 bases; at 1000x
-it produced 16,992 unitigs and a longest exact unitig of 2,878 bases. This
-illustrates both fragmentation and high-depth spurious output, not superiority
-over other assemblers. Approximate-overlap and repeat-graph approaches, such
-as Flye's, are possible future directions; they are not implemented here.
+For example, at 100x nominal depth with 2% substitutions and 2% indel events,
+cleanup reduced 449 unitigs to 442; at 1000x it reduced 16,992 to 15,663.
+The longest exact unitigs remained 219 and 2,878 bases, respectively. Many
+error fragments remain, and the 100x case remains highly fragmented. These
+results do not establish superiority over other assemblers. Approximate-overlap
+and repeat-graph approaches, such as Flye's, are possible future directions;
+they are not implemented here.
