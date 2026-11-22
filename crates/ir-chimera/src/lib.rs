@@ -16,6 +16,7 @@ pub struct Counts {
 #[derive(Clone, Copy, Debug)]
 pub struct Options {
     pub min_length: usize,
+    pub min_fraction: Option<f64>,
     pub min_identity: f64,
     pub chimeric: bool,
 }
@@ -24,6 +25,7 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             min_length: 500,
+            min_fraction: None,
             min_identity: 0.80,
             chimeric: false,
         }
@@ -68,8 +70,14 @@ impl Arm {
         }
     }
 
-    fn passes(&self, options: Options) -> bool {
-        self.target_bases.min(self.query_bases) >= options.min_length
+    fn passes(&self, options: Options, read_length: usize) -> bool {
+        let length_passes = self.target_bases.min(self.query_bases) >= options.min_length
+            || options.min_fraction.is_some_and(|fraction| {
+                (self.target_bases + self.query_bases) as f64 >= fraction * read_length as f64
+            });
+        length_passes
+            && self.target_bases > 0
+            && self.query_bases > 0
             && (self.target_end <= self.query_start || self.query_end <= self.target_start)
             && self.matches as f64 >= options.min_identity * self.columns as f64
     }
@@ -169,7 +177,7 @@ fn passing_alignment(seq: &[u8], mapping: &Mapping, options: Options) -> Result<
             arms[side].add(target, query, matches);
         }
     }
-    Ok(arms.iter().any(|arm| arm.passes(options)))
+    Ok(arms.iter().any(|arm| arm.passes(options, seq.len())))
 }
 
 pub fn is_chimeric(seq: &[u8], options: Options) -> Result<bool> {
@@ -198,12 +206,17 @@ pub fn is_chimeric(seq: &[u8], options: Options) -> Result<bool> {
         return Err("sequence contains a non-IUPAC DNA character".into());
     }
     if options.min_length == 0
+        || options
+            .min_fraction
+            .is_some_and(|f| !f.is_finite() || f <= 0.0 || f > 1.0)
         || !options.min_identity.is_finite()
         || !(0.0..=1.0).contains(&options.min_identity)
     {
         return Err("invalid alignment thresholds".into());
     }
-    if seq.len() / 2 < options.min_length || !has_inverted_seed(seq) {
+    if (options.min_fraction.is_none() && seq.len() / 2 < options.min_length)
+        || !has_inverted_seed(seq)
+    {
         return Ok(false);
     }
     let mut builder = Aligner::builder().ava_ont().with_cigar();
@@ -329,6 +342,7 @@ mod tests {
         };
         let mut options = Options {
             min_length: 600,
+            min_fraction: None,
             min_identity: 1.0,
             chimeric: true,
         };
@@ -340,6 +354,38 @@ mod tests {
         assert!(!passing_alignment(&seq, &mapping, options).unwrap());
         options.min_identity = 0.99;
         assert!(passing_alignment(&seq, &mapping, options).unwrap());
+    }
+
+    #[test]
+    fn fractional_threshold_uses_combined_arms_and_either_length_rule() {
+        let arm = Arm {
+            matches: 490,
+            columns: 500,
+            target_start: 0,
+            target_end: 500,
+            query_start: 900,
+            query_end: 1390,
+            target_bases: 500,
+            query_bases: 490,
+        };
+        let mut options = Options {
+            min_length: 500,
+            min_fraction: Some(0.495),
+            min_identity: 0.98,
+            chimeric: false,
+        };
+        assert!(arm.passes(options, 2000));
+        options.min_fraction = Some(0.4951);
+        assert!(!arm.passes(options, 2000));
+        options.min_length = 490;
+        options.min_fraction = Some(0.9);
+        assert!(arm.passes(options, 2000));
+        options.min_fraction = None;
+        options.min_length = 500;
+        assert!(!arm.passes(options, 2000));
+        options.min_fraction = Some(0.495);
+        options.min_identity = 0.99;
+        assert!(!arm.passes(options, 2000));
     }
 
     #[test]
@@ -399,6 +445,7 @@ mod tests {
         };
         let mut options = Options {
             min_length: 10,
+            min_fraction: None,
             min_identity: 9.0 / 11.0,
             chimeric: true,
         };

@@ -16,6 +16,7 @@ INPUT:
 OPTIONS:
     -c, --chimeric          Output chimeric rather than non-chimeric reads
     -l, --min-length <N>    Minimum aligned bases in each arm [default: 500]
+        --min-fraction <F>  Minimum combined arm length / read length (0 < F <= 1)
     -i, --min-identity <P>  Minimum percent identity (0-100) [default: 80]
     -t, --threads <N>       Worker threads [default: available CPUs, max 8]
         --log <FILE>        Write summary TSV to a new file (must not exist)
@@ -26,6 +27,8 @@ Reads without a non-overlapping inverted 15-mer pair are kept without alignment.
 Identity is exact A/C/G/T matches divided by alignment columns including gaps.
 The two aligned arms must not overlap. This is a heuristic, not a proof of
 chimera formation; repeats and sequencing errors can affect classification.
+If --min-fraction is supplied, either the absolute or fractional length
+threshold may be met; both are not required.
 ";
 
 fn run() -> Result<()> {
@@ -57,6 +60,14 @@ fn run() -> Result<()> {
                 if options.min_length == 0 {
                     return Err("--min-length must be positive".into());
                 }
+            }
+            "--min-fraction" => {
+                let value = args.next().ok_or("missing value for --min-fraction")?;
+                let fraction: f64 = value.parse().map_err(|_| "invalid --min-fraction")?;
+                if !fraction.is_finite() || fraction <= 0.0 || fraction > 1.0 {
+                    return Err("--min-fraction must be greater than 0 and at most 1".into());
+                }
+                options.min_fraction = Some(fraction);
             }
             "-i" | "--min-identity" => {
                 let value = args.next().ok_or("missing value for --min-identity")?;

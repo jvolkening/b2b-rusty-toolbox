@@ -196,6 +196,66 @@ fn fasta_length_and_identity_thresholds() {
 }
 
 #[test]
+fn fractional_threshold_is_optional_and_either_length_rule_suffices() {
+    let short = format!(">short\n{}\n", String::from_utf8_lossy(&hairpin(350)));
+    let input = short.as_bytes();
+    let output = run(input, &["--chimeric"]);
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    let output = run(input, &["--chimeric", "--min-fraction", "1"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, input);
+    let output = run(input, &["--min-fraction", "1"]);
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+
+    let arm = dna(700, 0x4321);
+    let seq = [
+        dna(500, 0x9753),
+        arm.clone(),
+        revcomp(&arm),
+        dna(500, 0x2468),
+    ]
+    .concat();
+    let long = format!(">long\n{}\n", String::from_utf8_lossy(&seq));
+    let output = run(long.as_bytes(), &["--chimeric", "--min-fraction", "1"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, long.as_bytes());
+    let output = run(
+        long.as_bytes(),
+        &[
+            "--chimeric",
+            "--min-length",
+            "1000",
+            "--min-fraction",
+            "0.5",
+        ],
+    );
+    assert!(output.status.success());
+    assert_eq!(output.stdout, long.as_bytes());
+    let output = run(
+        long.as_bytes(),
+        &[
+            "--chimeric",
+            "--min-length",
+            "1000",
+            "--min-fraction",
+            "0.8",
+        ],
+    );
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
 fn reads_wrapped_crlf_fasta_and_gzip() {
     let seq = hairpin(600);
     let input = format!(
@@ -326,6 +386,12 @@ fn rejects_malformed_input_and_invalid_options() {
         &["--min-length", "0"][..],
         &["--min-identity", "NaN"][..],
         &["--min-identity", "101"][..],
+        &["--min-fraction", "0"][..],
+        &["--min-fraction", "-0.1"][..],
+        &["--min-fraction", "1.01"][..],
+        &["--min-fraction", "NaN"][..],
+        &["--min-fraction", "inf"][..],
+        &["--min-fraction"][..],
         &["--log", "--chimeric"][..],
         &["--invalid"][..],
     ] {
