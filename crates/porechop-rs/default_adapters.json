@@ -1,0 +1,1315 @@
+{
+  "version": 1,
+  "adapters": [
+    {
+      "name": "SQK-NSK007",
+      "start": {
+        "name": "SQK-NSK007_Y_Top",
+        "sequence": "AATGTACTTCGTTCAGTTACGTATTGCT"
+      },
+      "end": {
+        "name": "SQK-NSK007_Y_Bottom",
+        "sequence": "GCAATACGTAACTGAACGAAGT"
+      }
+    },
+    {
+      "name": "Rapid",
+      "start": {
+        "name": "Rapid_adapter",
+        "sequence": "GTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA"
+      }
+    },
+    {
+      "name": "RBK004_upstream",
+      "start": {
+        "name": "RBK004_upstream",
+        "sequence": "AATGTACTTCGTTCAGTTACGGCTTGGGTGTTTAACC"
+      }
+    },
+    {
+      "name": "SQK-MAP006",
+      "start": {
+        "name": "SQK-MAP006_Y_Top_SK63",
+        "sequence": "GGTTGTTTCTGTTGGTGCTGATATTGCT"
+      },
+      "end": {
+        "name": "SQK-MAP006_Y_Bottom_SK64",
+        "sequence": "GCAATATCAGCACCAACAGAAA"
+      }
+    },
+    {
+      "name": "SQK-MAP006 short",
+      "start": {
+        "name": "SQK-MAP006_Short_Y_Top_LI32",
+        "sequence": "CGGCGTCTGCTTGGGTGTTTAACCT"
+      },
+      "end": {
+        "name": "SQK-MAP006_Short_Y_Bottom_LI33",
+        "sequence": "GGTTAAACACCCAAGCAGACGCCG"
+      }
+    },
+    {
+      "name": "PCR adapters 1",
+      "start": {
+        "name": "PCR_1_start",
+        "sequence": "ACTTGCCTGTCGCTCTATCTTC"
+      },
+      "end": {
+        "name": "PCR_1_end",
+        "sequence": "GAAGATAGAGCGACAGGCAAGT"
+      }
+    },
+    {
+      "name": "PCR adapters 2",
+      "start": {
+        "name": "PCR_2_start",
+        "sequence": "TTTCTGTTGGTGCTGATATTGC"
+      },
+      "end": {
+        "name": "PCR_2_end",
+        "sequence": "GCAATATCAGCACCAACAGAAA"
+      }
+    },
+    {
+      "name": "PCR adapters 3",
+      "start": {
+        "name": "PCR_3_start",
+        "sequence": "TACTTGCCTGTCGCTCTATCTTC"
+      },
+      "end": {
+        "name": "PCR_3_end",
+        "sequence": "GAAGATAGAGCGACAGGCAAGTA"
+      }
+    },
+    {
+      "name": "1D^2 part 1",
+      "start": {
+        "name": "1D2_part_1_start",
+        "sequence": "GAGAGGTTCCAAGTCAGAGAGGTTCCT"
+      },
+      "end": {
+        "name": "1D2_part_1_end",
+        "sequence": "AGGAACCTCTCTGACTTGGAACCTCTC"
+      }
+    },
+    {
+      "name": "1D^2 part 2",
+      "start": {
+        "name": "1D2_part_2_start",
+        "sequence": "CTTCGTTCAGTTACGTATTGCTGGCGTCTGCTT"
+      },
+      "end": {
+        "name": "1D2_part_2_end",
+        "sequence": "CACCCAAGCAGACGCCAGCAATACGTAACT"
+      }
+    },
+    {
+      "name": "cDNA SSP",
+      "start": {
+        "name": "cDNA_SSP",
+        "sequence": "TTTCTGTTGGTGCTGATATTGCTGCCATTACGGCCGGG"
+      },
+      "end": {
+        "name": "cDNA_SSP_rev",
+        "sequence": "CCCGGCCGTAATGGCAGCAATATCAGCACCAACAGAAA"
+      }
+    },
+    {
+      "name": "Barcode 1 (reverse)",
+      "start": {
+        "name": "BC01_rev",
+        "sequence": "CACAAAGACACCGACAACTTTCTT"
+      },
+      "end": {
+        "name": "BC01",
+        "sequence": "AAGAAAGTTGTCGGTGTCTTTGTG"
+      }
+    },
+    {
+      "name": "Barcode 2 (reverse)",
+      "start": {
+        "name": "BC02_rev",
+        "sequence": "ACAGACGACTACAAACGGAATCGA"
+      },
+      "end": {
+        "name": "BC02",
+        "sequence": "TCGATTCCGTTTGTAGTCGTCTGT"
+      }
+    },
+    {
+      "name": "Barcode 3 (reverse)",
+      "start": {
+        "name": "BC03_rev",
+        "sequence": "CCTGGTAACTGGGACACAAGACTC"
+      },
+      "end": {
+        "name": "BC03",
+        "sequence": "GAGTCTTGTGTCCCAGTTACCAGG"
+      }
+    },
+    {
+      "name": "Barcode 4 (reverse)",
+      "start": {
+        "name": "BC04_rev",
+        "sequence": "TAGGGAAACACGATAGAATCCGAA"
+      },
+      "end": {
+        "name": "BC04",
+        "sequence": "TTCGGATTCTATCGTGTTTCCCTA"
+      }
+    },
+    {
+      "name": "Barcode 5 (reverse)",
+      "start": {
+        "name": "BC05_rev",
+        "sequence": "AAGGTTACACAAACCCTGGACAAG"
+      },
+      "end": {
+        "name": "BC05",
+        "sequence": "CTTGTCCAGGGTTTGTGTAACCTT"
+      }
+    },
+    {
+      "name": "Barcode 6 (reverse)",
+      "start": {
+        "name": "BC06_rev",
+        "sequence": "GACTACTTTCTGCCTTTGCGAGAA"
+      },
+      "end": {
+        "name": "BC06",
+        "sequence": "TTCTCGCAAAGGCAGAAAGTAGTC"
+      }
+    },
+    {
+      "name": "Barcode 7 (reverse)",
+      "start": {
+        "name": "BC07_rev",
+        "sequence": "AAGGATTCATTCCCACGGTAACAC"
+      },
+      "end": {
+        "name": "BC07",
+        "sequence": "GTGTTACCGTGGGAATGAATCCTT"
+      }
+    },
+    {
+      "name": "Barcode 8 (reverse)",
+      "start": {
+        "name": "BC08_rev",
+        "sequence": "ACGTAACTTGGTTTGTTCCCTGAA"
+      },
+      "end": {
+        "name": "BC08",
+        "sequence": "TTCAGGGAACAAACCAAGTTACGT"
+      }
+    },
+    {
+      "name": "Barcode 9 (reverse)",
+      "start": {
+        "name": "BC09_rev",
+        "sequence": "AACCAAGACTCGCTGTGCCTAGTT"
+      },
+      "end": {
+        "name": "BC09",
+        "sequence": "AACTAGGCACAGCGAGTCTTGGTT"
+      }
+    },
+    {
+      "name": "Barcode 10 (reverse)",
+      "start": {
+        "name": "BC10_rev",
+        "sequence": "GAGAGGACAAAGGTTTCAACGCTT"
+      },
+      "end": {
+        "name": "BC10",
+        "sequence": "AAGCGTTGAAACCTTTGTCCTCTC"
+      }
+    },
+    {
+      "name": "Barcode 11 (reverse)",
+      "start": {
+        "name": "BC11_rev",
+        "sequence": "TCCATTCCCTCCGATAGATGAAAC"
+      },
+      "end": {
+        "name": "BC11",
+        "sequence": "GTTTCATCTATCGGAGGGAATGGA"
+      }
+    },
+    {
+      "name": "Barcode 12 (reverse)",
+      "start": {
+        "name": "BC12_rev",
+        "sequence": "TCCGATTCTGCTTCTTTCTACCTG"
+      },
+      "end": {
+        "name": "BC12",
+        "sequence": "CAGGTAGAAAGAAGCAGAATCGGA"
+      }
+    },
+    {
+      "name": "Barcode 1 (forward)",
+      "start": {
+        "name": "BC01",
+        "sequence": "AAGAAAGTTGTCGGTGTCTTTGTG"
+      },
+      "end": {
+        "name": "BC01_rev",
+        "sequence": "CACAAAGACACCGACAACTTTCTT"
+      }
+    },
+    {
+      "name": "Barcode 2 (forward)",
+      "start": {
+        "name": "BC02",
+        "sequence": "TCGATTCCGTTTGTAGTCGTCTGT"
+      },
+      "end": {
+        "name": "BC02_rev",
+        "sequence": "ACAGACGACTACAAACGGAATCGA"
+      }
+    },
+    {
+      "name": "Barcode 3 (forward)",
+      "start": {
+        "name": "BC03",
+        "sequence": "GAGTCTTGTGTCCCAGTTACCAGG"
+      },
+      "end": {
+        "name": "BC03_rev",
+        "sequence": "CCTGGTAACTGGGACACAAGACTC"
+      }
+    },
+    {
+      "name": "Barcode 4 (forward)",
+      "start": {
+        "name": "BC04",
+        "sequence": "TTCGGATTCTATCGTGTTTCCCTA"
+      },
+      "end": {
+        "name": "BC04_rev",
+        "sequence": "TAGGGAAACACGATAGAATCCGAA"
+      }
+    },
+    {
+      "name": "Barcode 5 (forward)",
+      "start": {
+        "name": "BC05",
+        "sequence": "CTTGTCCAGGGTTTGTGTAACCTT"
+      },
+      "end": {
+        "name": "BC05_rev",
+        "sequence": "AAGGTTACACAAACCCTGGACAAG"
+      }
+    },
+    {
+      "name": "Barcode 6 (forward)",
+      "start": {
+        "name": "BC06",
+        "sequence": "TTCTCGCAAAGGCAGAAAGTAGTC"
+      },
+      "end": {
+        "name": "BC06_rev",
+        "sequence": "GACTACTTTCTGCCTTTGCGAGAA"
+      }
+    },
+    {
+      "name": "Barcode 7 (forward)",
+      "start": {
+        "name": "BC07",
+        "sequence": "GTGTTACCGTGGGAATGAATCCTT"
+      },
+      "end": {
+        "name": "BC07_rev",
+        "sequence": "AAGGATTCATTCCCACGGTAACAC"
+      }
+    },
+    {
+      "name": "Barcode 8 (forward)",
+      "start": {
+        "name": "BC08",
+        "sequence": "TTCAGGGAACAAACCAAGTTACGT"
+      },
+      "end": {
+        "name": "BC08_rev",
+        "sequence": "ACGTAACTTGGTTTGTTCCCTGAA"
+      }
+    },
+    {
+      "name": "Barcode 9 (forward)",
+      "start": {
+        "name": "BC09",
+        "sequence": "AACTAGGCACAGCGAGTCTTGGTT"
+      },
+      "end": {
+        "name": "BC09_rev",
+        "sequence": "AACCAAGACTCGCTGTGCCTAGTT"
+      }
+    },
+    {
+      "name": "Barcode 10 (forward)",
+      "start": {
+        "name": "BC10",
+        "sequence": "AAGCGTTGAAACCTTTGTCCTCTC"
+      },
+      "end": {
+        "name": "BC10_rev",
+        "sequence": "GAGAGGACAAAGGTTTCAACGCTT"
+      }
+    },
+    {
+      "name": "Barcode 11 (forward)",
+      "start": {
+        "name": "BC11",
+        "sequence": "GTTTCATCTATCGGAGGGAATGGA"
+      },
+      "end": {
+        "name": "BC11_rev",
+        "sequence": "TCCATTCCCTCCGATAGATGAAAC"
+      }
+    },
+    {
+      "name": "Barcode 12 (forward)",
+      "start": {
+        "name": "BC12",
+        "sequence": "CAGGTAGAAAGAAGCAGAATCGGA"
+      },
+      "end": {
+        "name": "BC12_rev",
+        "sequence": "TCCGATTCTGCTTCTTTCTACCTG"
+      }
+    },
+    {
+      "name": "Barcode 13 (forward)",
+      "start": {
+        "name": "BC13",
+        "sequence": "AGAACGACTTCCATACTCGTGTGA"
+      },
+      "end": {
+        "name": "BC13_rev",
+        "sequence": "TCACACGAGTATGGAAGTCGTTCT"
+      }
+    },
+    {
+      "name": "Barcode 14 (forward)",
+      "start": {
+        "name": "BC14",
+        "sequence": "AACGAGTCTCTTGGGACCCATAGA"
+      },
+      "end": {
+        "name": "BC14_rev",
+        "sequence": "TCTATGGGTCCCAAGAGACTCGTT"
+      }
+    },
+    {
+      "name": "Barcode 15 (forward)",
+      "start": {
+        "name": "BC15",
+        "sequence": "AGGTCTACCTCGCTAACACCACTG"
+      },
+      "end": {
+        "name": "BC15_rev",
+        "sequence": "CAGTGGTGTTAGCGAGGTAGACCT"
+      }
+    },
+    {
+      "name": "Barcode 16 (forward)",
+      "start": {
+        "name": "BC16",
+        "sequence": "CGTCAACTGACAGTGGTTCGTACT"
+      },
+      "end": {
+        "name": "BC16_rev",
+        "sequence": "AGTACGAACCACTGTCAGTTGACG"
+      }
+    },
+    {
+      "name": "Barcode 17 (forward)",
+      "start": {
+        "name": "BC17",
+        "sequence": "ACCCTCCAGGAAAGTACCTCTGAT"
+      },
+      "end": {
+        "name": "BC17_rev",
+        "sequence": "ATCAGAGGTACTTTCCTGGAGGGT"
+      }
+    },
+    {
+      "name": "Barcode 18 (forward)",
+      "start": {
+        "name": "BC18",
+        "sequence": "CCAAACCCAACAACCTAGATAGGC"
+      },
+      "end": {
+        "name": "BC18_rev",
+        "sequence": "GCCTATCTAGGTTGTTGGGTTTGG"
+      }
+    },
+    {
+      "name": "Barcode 19 (forward)",
+      "start": {
+        "name": "BC19",
+        "sequence": "GTTCCTCGTGCAGTGTCAAGAGAT"
+      },
+      "end": {
+        "name": "BC19_rev",
+        "sequence": "ATCTCTTGACACTGCACGAGGAAC"
+      }
+    },
+    {
+      "name": "Barcode 20 (forward)",
+      "start": {
+        "name": "BC20",
+        "sequence": "TTGCGTCCTGTTACGAGAACTCAT"
+      },
+      "end": {
+        "name": "BC20_rev",
+        "sequence": "ATGAGTTCTCGTAACAGGACGCAA"
+      }
+    },
+    {
+      "name": "Barcode 21 (forward)",
+      "start": {
+        "name": "BC21",
+        "sequence": "GAGCCTCTCATTGTCCGTTCTCTA"
+      },
+      "end": {
+        "name": "BC21_rev",
+        "sequence": "TAGAGAACGGACAATGAGAGGCTC"
+      }
+    },
+    {
+      "name": "Barcode 22 (forward)",
+      "start": {
+        "name": "BC22",
+        "sequence": "ACCACTGCCATGTATCAAAGTACG"
+      },
+      "end": {
+        "name": "BC22_rev",
+        "sequence": "CGTACTTTGATACATGGCAGTGGT"
+      }
+    },
+    {
+      "name": "Barcode 23 (forward)",
+      "start": {
+        "name": "BC23",
+        "sequence": "CTTACTACCCAGTGAACCTCCTCG"
+      },
+      "end": {
+        "name": "BC23_rev",
+        "sequence": "CGAGGAGGTTCACTGGGTAGTAAG"
+      }
+    },
+    {
+      "name": "Barcode 24 (forward)",
+      "start": {
+        "name": "BC24",
+        "sequence": "GCATAGTTCTGCATGATGGGTTAG"
+      },
+      "end": {
+        "name": "BC24_rev",
+        "sequence": "CTAACCCATCATGCAGAACTATGC"
+      }
+    },
+    {
+      "name": "Barcode 25 (forward)",
+      "start": {
+        "name": "BC25",
+        "sequence": "GTAAGTTGGGTATGCAACGCAATG"
+      },
+      "end": {
+        "name": "BC25_rev",
+        "sequence": "CATTGCGTTGCATACCCAACTTAC"
+      }
+    },
+    {
+      "name": "Barcode 26 (forward)",
+      "start": {
+        "name": "BC26",
+        "sequence": "CATACAGCGACTACGCATTCTCAT"
+      },
+      "end": {
+        "name": "BC26_rev",
+        "sequence": "ATGAGAATGCGTAGTCGCTGTATG"
+      }
+    },
+    {
+      "name": "Barcode 27 (forward)",
+      "start": {
+        "name": "BC27",
+        "sequence": "CGACGGTTAGATTCACCTCTTACA"
+      },
+      "end": {
+        "name": "BC27_rev",
+        "sequence": "TGTAAGAGGTGAATCTAACCGTCG"
+      }
+    },
+    {
+      "name": "Barcode 28 (forward)",
+      "start": {
+        "name": "BC28",
+        "sequence": "TGAAACCTAAGAAGGCACCGTATC"
+      },
+      "end": {
+        "name": "BC28_rev",
+        "sequence": "GATACGGTGCCTTCTTAGGTTTCA"
+      }
+    },
+    {
+      "name": "Barcode 29 (forward)",
+      "start": {
+        "name": "BC29",
+        "sequence": "CTAGACACCTTGGGTTGACAGACC"
+      },
+      "end": {
+        "name": "BC29_rev",
+        "sequence": "GGTCTGTCAACCCAAGGTGTCTAG"
+      }
+    },
+    {
+      "name": "Barcode 30 (forward)",
+      "start": {
+        "name": "BC30",
+        "sequence": "TCAGTGAGGATCTACTTCGACCCA"
+      },
+      "end": {
+        "name": "BC30_rev",
+        "sequence": "TGGGTCGAAGTAGATCCTCACTGA"
+      }
+    },
+    {
+      "name": "Barcode 31 (forward)",
+      "start": {
+        "name": "BC31",
+        "sequence": "TGCGTACAGCAATCAGTTACATTG"
+      },
+      "end": {
+        "name": "BC31_rev",
+        "sequence": "CAATGTAACTGATTGCTGTACGCA"
+      }
+    },
+    {
+      "name": "Barcode 32 (forward)",
+      "start": {
+        "name": "BC32",
+        "sequence": "CCAGTAGAAGTCCGACAACGTCAT"
+      },
+      "end": {
+        "name": "BC32_rev",
+        "sequence": "ATGACGTTGTCGGACTTCTACTGG"
+      }
+    },
+    {
+      "name": "Barcode 33 (forward)",
+      "start": {
+        "name": "BC33",
+        "sequence": "CAGACTTGGTACGGTTGGGTAACT"
+      },
+      "end": {
+        "name": "BC33_rev",
+        "sequence": "AGTTACCCAACCGTACCAAGTCTG"
+      }
+    },
+    {
+      "name": "Barcode 34 (forward)",
+      "start": {
+        "name": "BC34",
+        "sequence": "GGACGAAGAACTCAAGTCAAAGGC"
+      },
+      "end": {
+        "name": "BC34_rev",
+        "sequence": "GCCTTTGACTTGAGTTCTTCGTCC"
+      }
+    },
+    {
+      "name": "Barcode 35 (forward)",
+      "start": {
+        "name": "BC35",
+        "sequence": "CTACTTACGAAGCTGAGGGACTGC"
+      },
+      "end": {
+        "name": "BC35_rev",
+        "sequence": "GCAGTCCCTCAGCTTCGTAAGTAG"
+      }
+    },
+    {
+      "name": "Barcode 36 (forward)",
+      "start": {
+        "name": "BC36",
+        "sequence": "ATGTCCCAGTTAGAGGAGGAAACA"
+      },
+      "end": {
+        "name": "BC36_rev",
+        "sequence": "TGTTTCCTCCTCTAACTGGGACAT"
+      }
+    },
+    {
+      "name": "Barcode 37 (forward)",
+      "start": {
+        "name": "BC37",
+        "sequence": "GCTTGCGATTGATGCTTAGTATCA"
+      },
+      "end": {
+        "name": "BC37_rev",
+        "sequence": "TGATACTAAGCATCAATCGCAAGC"
+      }
+    },
+    {
+      "name": "Barcode 38 (forward)",
+      "start": {
+        "name": "BC38",
+        "sequence": "ACCACAGGAGGACGATACAGAGAA"
+      },
+      "end": {
+        "name": "BC38_rev",
+        "sequence": "TTCTCTGTATCGTCCTCCTGTGGT"
+      }
+    },
+    {
+      "name": "Barcode 39 (forward)",
+      "start": {
+        "name": "BC39",
+        "sequence": "CCACAGTGTCAACTAGAGCCTCTC"
+      },
+      "end": {
+        "name": "BC39_rev",
+        "sequence": "GAGAGGCTCTAGTTGACACTGTGG"
+      }
+    },
+    {
+      "name": "Barcode 40 (forward)",
+      "start": {
+        "name": "BC40",
+        "sequence": "TAGTTTGGATGACCAAGGATAGCC"
+      },
+      "end": {
+        "name": "BC40_rev",
+        "sequence": "GGCTATCCTTGGTCATCCAAACTA"
+      }
+    },
+    {
+      "name": "Barcode 41 (forward)",
+      "start": {
+        "name": "BC41",
+        "sequence": "GGAGTTCGTCCAGAGAAGTACACG"
+      },
+      "end": {
+        "name": "BC41_rev",
+        "sequence": "CGTGTACTTCTCTGGACGAACTCC"
+      }
+    },
+    {
+      "name": "Barcode 42 (forward)",
+      "start": {
+        "name": "BC42",
+        "sequence": "CTACGTGTAAGGCATACCTGCCAG"
+      },
+      "end": {
+        "name": "BC42_rev",
+        "sequence": "CTGGCAGGTATGCCTTACACGTAG"
+      }
+    },
+    {
+      "name": "Barcode 43 (forward)",
+      "start": {
+        "name": "BC43",
+        "sequence": "CTTTCGTTGTTGACTCGACGGTAG"
+      },
+      "end": {
+        "name": "BC43_rev",
+        "sequence": "CTACCGTCGAGTCAACAACGAAAG"
+      }
+    },
+    {
+      "name": "Barcode 44 (forward)",
+      "start": {
+        "name": "BC44",
+        "sequence": "AGTAGAAAGGGTTCCTTCCCACTC"
+      },
+      "end": {
+        "name": "BC44_rev",
+        "sequence": "GAGTGGGAAGGAACCCTTTCTACT"
+      }
+    },
+    {
+      "name": "Barcode 45 (forward)",
+      "start": {
+        "name": "BC45",
+        "sequence": "GATCCAACAGAGATGCCTTCAGTG"
+      },
+      "end": {
+        "name": "BC45_rev",
+        "sequence": "CACTGAAGGCATCTCTGTTGGATC"
+      }
+    },
+    {
+      "name": "Barcode 46 (forward)",
+      "start": {
+        "name": "BC46",
+        "sequence": "GCTGTGTTCCACTTCATTCTCCTG"
+      },
+      "end": {
+        "name": "BC46_rev",
+        "sequence": "CAGGAGAATGAAGTGGAACACAGC"
+      }
+    },
+    {
+      "name": "Barcode 47 (forward)",
+      "start": {
+        "name": "BC47",
+        "sequence": "GTGCAACTTTCCCACAGGTAGTTC"
+      },
+      "end": {
+        "name": "BC47_rev",
+        "sequence": "GAACTACCTGTGGGAAAGTTGCAC"
+      }
+    },
+    {
+      "name": "Barcode 48 (forward)",
+      "start": {
+        "name": "BC48",
+        "sequence": "CATCTGGAACGTGGTACACCTGTA"
+      },
+      "end": {
+        "name": "BC48_rev",
+        "sequence": "TACAGGTGTACCACGTTCCAGATG"
+      }
+    },
+    {
+      "name": "Barcode 49 (forward)",
+      "start": {
+        "name": "BC49",
+        "sequence": "ACTGGTGCAGCTTTGAACATCTAG"
+      },
+      "end": {
+        "name": "BC49_rev",
+        "sequence": "CTAGATGTTCAAAGCTGCACCAGT"
+      }
+    },
+    {
+      "name": "Barcode 50 (forward)",
+      "start": {
+        "name": "BC50",
+        "sequence": "ATGGACTTTGGTAACTTCCTGCGT"
+      },
+      "end": {
+        "name": "BC50_rev",
+        "sequence": "ACGCAGGAAGTTACCAAAGTCCAT"
+      }
+    },
+    {
+      "name": "Barcode 51 (forward)",
+      "start": {
+        "name": "BC51",
+        "sequence": "GTTGAATGAGCCTACTGGGTCCTC"
+      },
+      "end": {
+        "name": "BC51_rev",
+        "sequence": "GAGGACCCAGTAGGCTCATTCAAC"
+      }
+    },
+    {
+      "name": "Barcode 52 (forward)",
+      "start": {
+        "name": "BC52",
+        "sequence": "TGAGAGACAAGATTGTTCGTGGAC"
+      },
+      "end": {
+        "name": "BC52_rev",
+        "sequence": "GTCCACGAACAATCTTGTCTCTCA"
+      }
+    },
+    {
+      "name": "Barcode 53 (forward)",
+      "start": {
+        "name": "BC53",
+        "sequence": "AGATTCAGACCGTCTCATGCAAAG"
+      },
+      "end": {
+        "name": "BC53_rev",
+        "sequence": "CTTTGCATGAGACGGTCTGAATCT"
+      }
+    },
+    {
+      "name": "Barcode 54 (forward)",
+      "start": {
+        "name": "BC54",
+        "sequence": "CAAGAGCTTTGACTAAGGAGCATG"
+      },
+      "end": {
+        "name": "BC54_rev",
+        "sequence": "CATGCTCCTTAGTCAAAGCTCTTG"
+      }
+    },
+    {
+      "name": "Barcode 55 (forward)",
+      "start": {
+        "name": "BC55",
+        "sequence": "TGGAAGATGAGACCCTGATCTACG"
+      },
+      "end": {
+        "name": "BC55_rev",
+        "sequence": "CGTAGATCAGGGTCTCATCTTCCA"
+      }
+    },
+    {
+      "name": "Barcode 56 (forward)",
+      "start": {
+        "name": "BC56",
+        "sequence": "TCACTACTCAACAGGTGGCATGAA"
+      },
+      "end": {
+        "name": "BC56_rev",
+        "sequence": "TTCATGCCACCTGTTGAGTAGTGA"
+      }
+    },
+    {
+      "name": "Barcode 57 (forward)",
+      "start": {
+        "name": "BC57",
+        "sequence": "GCTAGGTCAATCTCCTTCGGAAGT"
+      },
+      "end": {
+        "name": "BC57_rev",
+        "sequence": "ACTTCCGAAGGAGATTGACCTAGC"
+      }
+    },
+    {
+      "name": "Barcode 58 (forward)",
+      "start": {
+        "name": "BC58",
+        "sequence": "CAGGTTACTCCTCCGTGAGTCTGA"
+      },
+      "end": {
+        "name": "BC58_rev",
+        "sequence": "TCAGACTCACGGAGGAGTAACCTG"
+      }
+    },
+    {
+      "name": "Barcode 59 (forward)",
+      "start": {
+        "name": "BC59",
+        "sequence": "TCAATCAAGAAGGGAAAGCAAGGT"
+      },
+      "end": {
+        "name": "BC59_rev",
+        "sequence": "ACCTTGCTTTCCCTTCTTGATTGA"
+      }
+    },
+    {
+      "name": "Barcode 60 (forward)",
+      "start": {
+        "name": "BC60",
+        "sequence": "CATGTTCAACCAAGGCTTCTATGG"
+      },
+      "end": {
+        "name": "BC60_rev",
+        "sequence": "CCATAGAAGCCTTGGTTGAACATG"
+      }
+    },
+    {
+      "name": "Barcode 61 (forward)",
+      "start": {
+        "name": "BC61",
+        "sequence": "AGAGGGTACTATGTGCCTCAGCAC"
+      },
+      "end": {
+        "name": "BC61_rev",
+        "sequence": "GTGCTGAGGCACATAGTACCCTCT"
+      }
+    },
+    {
+      "name": "Barcode 62 (forward)",
+      "start": {
+        "name": "BC62",
+        "sequence": "CACCCACACTTACTTCAGGACGTA"
+      },
+      "end": {
+        "name": "BC62_rev",
+        "sequence": "TACGTCCTGAAGTAAGTGTGGGTG"
+      }
+    },
+    {
+      "name": "Barcode 63 (forward)",
+      "start": {
+        "name": "BC63",
+        "sequence": "TTCTGAAGTTCCTGGGTCTTGAAC"
+      },
+      "end": {
+        "name": "BC63_rev",
+        "sequence": "GTTCAAGACCCAGGAACTTCAGAA"
+      }
+    },
+    {
+      "name": "Barcode 64 (forward)",
+      "start": {
+        "name": "BC64",
+        "sequence": "GACAGACACCGTTCATCGACTTTC"
+      },
+      "end": {
+        "name": "BC64_rev",
+        "sequence": "GAAAGTCGATGAACGGTGTCTGTC"
+      }
+    },
+    {
+      "name": "Barcode 65 (forward)",
+      "start": {
+        "name": "BC65",
+        "sequence": "TTCTCAGTCTTCCTCCAGACAAGG"
+      },
+      "end": {
+        "name": "BC65_rev",
+        "sequence": "CCTTGTCTGGAGGAAGACTGAGAA"
+      }
+    },
+    {
+      "name": "Barcode 66 (forward)",
+      "start": {
+        "name": "BC66",
+        "sequence": "CCGATCCTTGTGGCTTCTAACTTC"
+      },
+      "end": {
+        "name": "BC66_rev",
+        "sequence": "GAAGTTAGAAGCCACAAGGATCGG"
+      }
+    },
+    {
+      "name": "Barcode 67 (forward)",
+      "start": {
+        "name": "BC67",
+        "sequence": "GTTTGTCATACTCGTGTGCTCACC"
+      },
+      "end": {
+        "name": "BC67_rev",
+        "sequence": "GGTGAGCACACGAGTATGACAAAC"
+      }
+    },
+    {
+      "name": "Barcode 68 (forward)",
+      "start": {
+        "name": "BC68",
+        "sequence": "GAATCTAAGCAAACACGAAGGTGG"
+      },
+      "end": {
+        "name": "BC68_rev",
+        "sequence": "CCACCTTCGTGTTTGCTTAGATTC"
+      }
+    },
+    {
+      "name": "Barcode 69 (forward)",
+      "start": {
+        "name": "BC69",
+        "sequence": "TACAGTCCGAGCCTCATGTGATCT"
+      },
+      "end": {
+        "name": "BC69_rev",
+        "sequence": "AGATCACATGAGGCTCGGACTGTA"
+      }
+    },
+    {
+      "name": "Barcode 70 (forward)",
+      "start": {
+        "name": "BC70",
+        "sequence": "ACCGAGATCCTACGAATGGAGTGT"
+      },
+      "end": {
+        "name": "BC70_rev",
+        "sequence": "ACACTCCATTCGTAGGATCTCGGT"
+      }
+    },
+    {
+      "name": "Barcode 71 (forward)",
+      "start": {
+        "name": "BC71",
+        "sequence": "CCTGGGAGCATCAGGTAGTAACAG"
+      },
+      "end": {
+        "name": "BC71_rev",
+        "sequence": "CTGTTACTACCTGATGCTCCCAGG"
+      }
+    },
+    {
+      "name": "Barcode 72 (forward)",
+      "start": {
+        "name": "BC72",
+        "sequence": "TAGCTGACTGTCTTCCATACCGAC"
+      },
+      "end": {
+        "name": "BC72_rev",
+        "sequence": "GTCGGTATGGAAGACAGTCAGCTA"
+      }
+    },
+    {
+      "name": "Barcode 73 (forward)",
+      "start": {
+        "name": "BC73",
+        "sequence": "AAGAAACAGGATGACAGAACCCTC"
+      },
+      "end": {
+        "name": "BC73_rev",
+        "sequence": "GAGGGTTCTGTCATCCTGTTTCTT"
+      }
+    },
+    {
+      "name": "Barcode 74 (forward)",
+      "start": {
+        "name": "BC74",
+        "sequence": "TACAAGCATCCCAACACTTCCACT"
+      },
+      "end": {
+        "name": "BC74_rev",
+        "sequence": "AGTGGAAGTGTTGGGATGCTTGTA"
+      }
+    },
+    {
+      "name": "Barcode 75 (forward)",
+      "start": {
+        "name": "BC75",
+        "sequence": "GACCATTGTGATGAACCCTGTTGT"
+      },
+      "end": {
+        "name": "BC75_rev",
+        "sequence": "ACAACAGGGTTCATCACAATGGTC"
+      }
+    },
+    {
+      "name": "Barcode 76 (forward)",
+      "start": {
+        "name": "BC76",
+        "sequence": "ATGCTTGTTACATCAACCCTGGAC"
+      },
+      "end": {
+        "name": "BC76_rev",
+        "sequence": "GTCCAGGGTTGATGTAACAAGCAT"
+      }
+    },
+    {
+      "name": "Barcode 77 (forward)",
+      "start": {
+        "name": "BC77",
+        "sequence": "CGACCTGTTTCTCAGGGATACAAC"
+      },
+      "end": {
+        "name": "BC77_rev",
+        "sequence": "GTTGTATCCCTGAGAAACAGGTCG"
+      }
+    },
+    {
+      "name": "Barcode 78 (forward)",
+      "start": {
+        "name": "BC78",
+        "sequence": "AACAACCGAACCTTTGAATCAGAA"
+      },
+      "end": {
+        "name": "BC78_rev",
+        "sequence": "TTCTGATTCAAAGGTTCGGTTGTT"
+      }
+    },
+    {
+      "name": "Barcode 79 (forward)",
+      "start": {
+        "name": "BC79",
+        "sequence": "TCTCGGAGATAGTTCTCACTGCTG"
+      },
+      "end": {
+        "name": "BC79_rev",
+        "sequence": "CAGCAGTGAGAACTATCTCCGAGA"
+      }
+    },
+    {
+      "name": "Barcode 80 (forward)",
+      "start": {
+        "name": "BC80",
+        "sequence": "CGGATGAACATAGGATAGCGATTC"
+      },
+      "end": {
+        "name": "BC80_rev",
+        "sequence": "GAATCGCTATCCTATGTTCATCCG"
+      }
+    },
+    {
+      "name": "Barcode 81 (forward)",
+      "start": {
+        "name": "BC81",
+        "sequence": "CCTCATCTTGTGAAGTTGTTTCGG"
+      },
+      "end": {
+        "name": "BC81_rev",
+        "sequence": "CCGAAACAACTTCACAAGATGAGG"
+      }
+    },
+    {
+      "name": "Barcode 82 (forward)",
+      "start": {
+        "name": "BC82",
+        "sequence": "ACGGTATGTCGAGTTCCAGGACTA"
+      },
+      "end": {
+        "name": "BC82_rev",
+        "sequence": "TAGTCCTGGAACTCGACATACCGT"
+      }
+    },
+    {
+      "name": "Barcode 83 (forward)",
+      "start": {
+        "name": "BC83",
+        "sequence": "TGGCTTGATCTAGGTAAGGTCGAA"
+      },
+      "end": {
+        "name": "BC83_rev",
+        "sequence": "TTCGACCTTACCTAGATCAAGCCA"
+      }
+    },
+    {
+      "name": "Barcode 84 (forward)",
+      "start": {
+        "name": "BC84",
+        "sequence": "GTAGTGGACCTAGAACCTGTGCCA"
+      },
+      "end": {
+        "name": "BC84_rev",
+        "sequence": "TGGCACAGGTTCTAGGTCCACTAC"
+      }
+    },
+    {
+      "name": "Barcode 85 (forward)",
+      "start": {
+        "name": "BC85",
+        "sequence": "AACGGAGGAGTTAGTTGGATGATC"
+      },
+      "end": {
+        "name": "BC85_rev",
+        "sequence": "GATCATCCAACTAACTCCTCCGTT"
+      }
+    },
+    {
+      "name": "Barcode 86 (forward)",
+      "start": {
+        "name": "BC86",
+        "sequence": "AGGTGATCCCAACAAGCGTAAGTA"
+      },
+      "end": {
+        "name": "BC86_rev",
+        "sequence": "TACTTACGCTTGTTGGGATCACCT"
+      }
+    },
+    {
+      "name": "Barcode 87 (forward)",
+      "start": {
+        "name": "BC87",
+        "sequence": "TACATGCTCCTGTTGTTAGGGAGG"
+      },
+      "end": {
+        "name": "BC87_rev",
+        "sequence": "CCTCCCTAACAACAGGAGCATGTA"
+      }
+    },
+    {
+      "name": "Barcode 88 (forward)",
+      "start": {
+        "name": "BC88",
+        "sequence": "TCTTCTACTACCGATCCGAAGCAG"
+      },
+      "end": {
+        "name": "BC88_rev",
+        "sequence": "CTGCTTCGGATCGGTAGTAGAAGA"
+      }
+    },
+    {
+      "name": "Barcode 89 (forward)",
+      "start": {
+        "name": "BC89",
+        "sequence": "ACAGCATCAATGTTTGGCTAGTTG"
+      },
+      "end": {
+        "name": "BC89_rev",
+        "sequence": "CAACTAGCCAAACATTGATGCTGT"
+      }
+    },
+    {
+      "name": "Barcode 90 (forward)",
+      "start": {
+        "name": "BC90",
+        "sequence": "GATGTAGAGGGTACGGTTTGAGGC"
+      },
+      "end": {
+        "name": "BC90_rev",
+        "sequence": "GCCTCAAACCGTACCCTCTACATC"
+      }
+    },
+    {
+      "name": "Barcode 91 (forward)",
+      "start": {
+        "name": "BC91",
+        "sequence": "GGCTCCATAGGAACTCACGCTACT"
+      },
+      "end": {
+        "name": "BC91_rev",
+        "sequence": "AGTAGCGTGAGTTCCTATGGAGCC"
+      }
+    },
+    {
+      "name": "Barcode 92 (forward)",
+      "start": {
+        "name": "BC92",
+        "sequence": "TTGTGAGTGGAAAGATACAGGACC"
+      },
+      "end": {
+        "name": "BC92_rev",
+        "sequence": "GGTCCTGTATCTTTCCACTCACAA"
+      }
+    },
+    {
+      "name": "Barcode 93 (forward)",
+      "start": {
+        "name": "BC93",
+        "sequence": "AGTTTCCATCACTTCAGACTTGGG"
+      },
+      "end": {
+        "name": "BC93_rev",
+        "sequence": "CCCAAGTCTGAAGTGATGGAAACT"
+      }
+    },
+    {
+      "name": "Barcode 94 (forward)",
+      "start": {
+        "name": "BC94",
+        "sequence": "GATTGTCCTCAAACTGCCACCTAC"
+      },
+      "end": {
+        "name": "BC94_rev",
+        "sequence": "GTAGGTGGCAGTTTGAGGACAATC"
+      }
+    },
+    {
+      "name": "Barcode 95 (forward)",
+      "start": {
+        "name": "BC95",
+        "sequence": "CCTGTCTGGAAGAAGAATGGACTT"
+      },
+      "end": {
+        "name": "BC95_rev",
+        "sequence": "AAGTCCATTCTTCTTCCAGACAGG"
+      }
+    },
+    {
+      "name": "Barcode 96 (forward)",
+      "start": {
+        "name": "BC96",
+        "sequence": "CTGAACGGTCATAGAGTCCACCAT"
+      },
+      "end": {
+        "name": "BC96_rev",
+        "sequence": "ATGGTGGACTCTATGACCGTTCAG"
+      }
+    }
+  ],
+  "barcode_contexts": {
+    "native_start_prefix": "AATGTACTTCGTTCAGTTACGTATTGCTAAGGTTAA",
+    "native_start_suffix": "CAGCACCT",
+    "native_end_prefix": "AGGTGCTG",
+    "native_end_suffix": "TTAACCTTAGCAATACGTAACTGAACGAAGT",
+    "rapid_old_prefix": "AATGTACTTCGTTCAGTTACGTATTGCT",
+    "rapid_new_prefix": "AATGTACTTCGTTCAGTTACGGCTTGGGTGTTTAACC",
+    "rapid_suffix": "GTTTTCGCATTTATCGTGAAACGCTTTCGCGTTTTTCGTGCGCCGCTTCA"
+  }
+}

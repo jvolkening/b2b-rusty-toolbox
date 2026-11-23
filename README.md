@@ -8,6 +8,27 @@ More documentation may come at some point. For now, consider this a personal Rus
 
 - `n-every`: insert an `N` after every K bases in FASTA input.
 - `bg-window`: shrink a bedgraph using a per-sequence adaptive sliding window (min/max/median/mean/sum) so each sequence yields a user-specified range of entries. See `bg-window --help`.
+- `porechop-rs`: trim Oxford Nanopore adapters, split reads with internal adapters, and demultiplex barcodes. This is a parallel Rust implementation of [Porechop](https://github.com/rrwick/Porechop), retaining its bundled SeqAn/C++ alignment kernel for compatibility. It accepts FASTA/FASTQ files (including gzip) and directories of FASTQ files, and preserves the original trimming and barcode options; progress messages differ.
+
+  ```sh
+  cargo build --release -p porechop-rs
+  target/release/porechop-rs -i reads.fastq.gz -o trimmed.fastq.gz -t 8
+  target/release/porechop-rs -i reads.fastq.gz -b barcode-bins
+  target/release/porechop-rs --help
+  ```
+
+  To customize adapter and barcode sequences, export the defaults to a new JSON file, edit it, and pass it with `--adapter_file`:
+
+  ```sh
+  target/release/porechop-rs --write_default_adapters adapters.json
+  target/release/porechop-rs -i reads.fastq.gz -o trimmed.fastq.gz --adapter_file adapters.json
+  ```
+
+  The file replaces the defaults. Each adapter has a unique `name` and at least one of `start` and `end`, each containing a `name` and DNA `sequence` (A, C, G, T or N). Barcode set names start with `Barcode ` and include `(forward)` or `(reverse)`; both ends are required, and reverse barcode start names contain `_rev`. The `barcode_contexts` entries specify flanking sequences for the original full native and rapid barcode adapters; their expansion uses the original kit and barcode naming conventions.
+
+  Building needs Rust 1.88 or later and a C++14 compiler; Python is not needed at runtime. Run `cargo test -p porechop-rs` for self-contained regression tests. For the optional differential suite, build the original C++ component with `make` in a checkout of the [reference branch](https://github.com/jvolkening/Porechop/tree/copilot/configurable-adapter-sequences), then run `PORECHOP_REFERENCE_ROOT=/path/to/Porechop python3 crates/porechop-rs/tests/compatibility.py` after the release build.
+
+  This crate is **GPL-3.0-or-later**; see [`crates/porechop-rs/NOTICE.md`](crates/porechop-rs/NOTICE.md) for attribution and bundled third-party licenses. Include the notice and license files when distributing the executable.
 - `ir-chimera`: filter nanopore FASTA/FASTQ reads by inverted-repeat self-alignment. Reads with a plausible inverted seed are aligned to themselves using an in-process minimap2 `ava-ont` index, searching only the reverse strand. By default, reads without a qualifying alignment are written to stdout; `--chimeric` selects the others.
 
   A qualifying alignment has two non-overlapping arms, each spanning at least 500 bases, and at least 80% identity (exact A/C/G/T matches divided by alignment columns, including gaps). Set these thresholds with `--min-length` and `--min-identity` (percent). Alignment portions crossing the self-alignment diagonal are split into non-overlapping arms before scoring. Ambiguous bases do not count as matches. Reads without a non-overlapping inverted 15-mer pair are retained without alignment; this and minimap2's heuristic seeding favor retaining questionable reads. Detection is not exhaustive, and biological inverted repeats can also be detected. Alignments can extend a shorter inverted repeat into flanking sequence, including the intervening sequence aligned to itself, and thereby exceed the thresholds; tune cutoffs against representative data.
