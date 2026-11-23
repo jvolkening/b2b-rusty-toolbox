@@ -8,7 +8,7 @@ More documentation may come at some point. For now, consider this a personal Rus
 
 - `n-every`: insert an `N` after every K bases in FASTA input.
 - `bg-window`: shrink a bedgraph using a per-sequence adaptive sliding window (min/max/median/mean/sum) so each sequence yields a user-specified range of entries. See `bg-window --help`.
-- `porechop-rs`: trim Oxford Nanopore adapters, split reads with internal adapters, and demultiplex barcodes. This is a parallel Rust implementation of [Porechop](https://github.com/rrwick/Porechop), retaining its bundled SeqAn/C++ alignment kernel for compatibility. It accepts FASTA/FASTQ files (including gzip) and directories of FASTQ files, and preserves the original trimming and barcode options; progress messages differ.
+- `porechop-rs`: trim Oxford Nanopore adapters, split reads with internal adapters, and demultiplex barcodes. This is a parallel Rust implementation of [Porechop](https://github.com/rrwick/Porechop). It accepts FASTA/FASTQ files (including gzip) and directories of FASTQ files, and preserves the original trimming and barcode options; progress messages differ.
 
   ```sh
   cargo build --release -p porechop-rs
@@ -26,7 +26,9 @@ More documentation may come at some point. For now, consider this a personal Rus
 
   The file replaces the defaults. Each adapter has a unique `name` and at least one of `start` and `end`, each containing a `name` and DNA `sequence` (A, C, G, T or N). Barcode set names start with `Barcode ` and include `(forward)` or `(reverse)`; both ends are required, and reverse barcode start names contain `_rev`. The `barcode_contexts` entries specify flanking sequences for the original full native and rapid barcode adapters; their expansion uses the original kit and barcode naming conventions.
 
-  Building needs Rust 1.88 or later and a C++14 compiler; Python is not needed at runtime. Run `cargo test -p porechop-rs` for self-contained regression tests. For the optional differential suite, build the original C++ component with `make` in a checkout of the [reference branch](https://github.com/jvolkening/Porechop/tree/copilot/configurable-adapter-sequences), then run `PORECHOP_REFERENCE_ROOT=/path/to/Porechop python3 crates/porechop-rs/tests/compatibility.py` after the release build.
+  Middle-adapter searches use a four-exact-seed heuristic followed by Parasail alignment with default scoring and a middle identity threshold of at least 90%. The heuristic can miss adapters even above the threshold if all seeds are disrupted, and alignments near the threshold or split coordinates may differ from Porechop. Thresholds below 90%, custom scoring, and adapters shorter than nine bases use the original SeqAn alignment; adapter discovery and end trimming always use SeqAn. To avoid the heuristic, use a threshold below 90% or custom scoring.
+
+  Building needs Rust 1.88 or later and C and C++14 compilers; Python is not needed at runtime. Run `cargo test -p porechop-rs` for self-contained regression tests. For the optional differential suite, build the original C++ component with `make` in a checkout of the [reference branch](https://github.com/jvolkening/Porechop/tree/copilot/configurable-adapter-sequences), then run `PORECHOP_REFERENCE_ROOT=/path/to/Porechop python3 crates/porechop-rs/tests/compatibility.py` after the release build.
 
   This crate is **GPL-3.0-or-later**; see [`crates/porechop-rs/NOTICE.md`](crates/porechop-rs/NOTICE.md) for attribution and bundled third-party licenses. Include the notice and license files when distributing the executable.
 - `ir-chimera`: filter nanopore FASTA/FASTQ reads by inverted-repeat self-alignment. Reads with a plausible inverted seed are aligned to themselves using an in-process minimap2 `ava-ont` index, searching only the reverse strand. By default, reads without a qualifying alignment are written to stdout; `--chimeric` selects the others.

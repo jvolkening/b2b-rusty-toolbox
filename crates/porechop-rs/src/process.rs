@@ -1,7 +1,7 @@
 use crate::adapters::Adapter;
-use crate::align::align;
+use crate::align::{align, align_middle};
 use crate::reads::ReadRecord;
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use rayon::prelude::*;
 use std::collections::HashSet;
 
@@ -237,7 +237,7 @@ pub fn trim_ends(
     });
 }
 
-pub fn trim_middle(reads: &mut [ReadRecord], adapters: &[Adapter], s: &Settings) {
+pub fn trim_middle(reads: &mut [ReadRecord], adapters: &[Adapter], s: &Settings) -> Result<()> {
     let mut sequences = Vec::new();
     let mut start_names = HashSet::new();
     let mut end_names = HashSet::new();
@@ -257,11 +257,17 @@ pub fn trim_middle(reads: &mut [ReadRecord], adapters: &[Adapter], s: &Settings)
             end_names.insert(end.name.as_str());
         }
     }
-    reads.par_iter_mut().for_each(|read| {
+    reads.par_iter_mut().try_for_each(|read| {
         let mut masked = read.trimmed().to_vec();
         for sequence in &sequences {
             loop {
-                let hit = align(&masked, sequence.sequence.as_bytes(), &s.scores);
+                let hit = align_middle(
+                    &masked,
+                    sequence.sequence.as_bytes(),
+                    &s.scores,
+                    s.middle_threshold,
+                )
+                .with_context(|| format!("middle-adapter search for {}", sequence.name))?;
                 if hit.full < s.middle_threshold || hit.start < 0 || hit.end <= hit.start {
                     break;
                 }
@@ -288,5 +294,6 @@ pub fn trim_middle(reads: &mut [ReadRecord], adapters: &[Adapter], s: &Settings)
                     .push((start.saturating_sub(left), end.saturating_add(right)));
             }
         }
-    });
+        Ok(())
+    })
 }

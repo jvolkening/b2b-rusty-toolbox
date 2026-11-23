@@ -13,3 +13,13 @@ in [LICENSE-SEQAN](LICENSE-SEQAN). They include portions covered by
 [LICENSE-NVIDIA](LICENSE-NVIDIA), Boost's [LICENSE-BOOST](LICENSE-BOOST),
 and samtools' [LICENSE-SAMTOOLS](LICENSE-SAMTOOLS). Their original notices
 remain in the headers.
+
+The vendored [Parasail](https://github.com/jeffdaily/parasail) 2.6.1 source
+is Copyright 2015 Battelle Memorial Institute, distributed under the license
+in [LICENSE-PARASAIL](LICENSE-PARASAIL).
+Its traceback allocation handling has been modified to report allocation
+failures rather than dereferencing null pointers.
+
+Daily, J. (2016). Parasail: SIMD C library for global, semi-global, and local
+pairwise sequence alignments. *BMC Bioinformatics*, 17, 81.
+https://doi.org/10.1186/s12859-016-0930-z

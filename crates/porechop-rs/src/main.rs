@@ -278,7 +278,7 @@ fn run(args: Args) -> Result<()> {
                 "Splitting"
             };
             message(&args, &format!("\n{verb} reads containing middle adapters"));
-            process::trim_middle(&mut reads, &matching, &s);
+            process::trim_middle(&mut reads, &matching, &s)?;
             if args.verbosity >= 2 {
                 for read in &reads {
                     if !read.middle_hits.is_empty() {
