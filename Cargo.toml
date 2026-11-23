@@ -3,5 +3,9 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
+authors = ["Jeremy Volkening <jeremy.volkening@base2bio.com>"]
+repository = "https://github.com/jvolkening/b2b-rusty-toolbox"
+license = "MIT"
+description = "An odd assortment of bioinformatics tools written in Rust for performance"

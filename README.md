@@ -16,7 +16,9 @@ Shrink a bedgraph using a per-sequence adaptive sliding window (min/max/median/m
 
 ### `porechop-rs`
 
-Trim Oxford Nanopore adapters, split reads with internal adapters, and demultiplex barcodes. This is a mostly drop-in Rust implementation of [Porechop](https://github.com/rrwick/Porechop). It accepts FASTA/FASTQ files (including gzip) and directories of FASTQ files, and preserves the original trimming and barcode options; progress messages differ slightly. End-trimming should be identical to the original Porechop (although no guarantees are made). The middle adapter search has been refactored for speed (see below), although results are *nearly* identical to the original behavior in our testing.
+Trim Oxford Nanopore adapters, split reads with internal adapters, and demultiplex barcodes. This is a mostly drop-in Rust re-implementation of [Porechop](https://github.com/rrwick/Porechop) (thank you Ryan Wick!). It accepts FASTA/FASTQ files (including gzip) and directories of FASTQ files and preserves the original trimming and barcode options; progress messages differ slightly. End-trimming should be identical to the original Porechop (although no guarantees are made). The middle adapter search has been refactored for speed (see below), although results are *nearly* identical to the original behavior in our testing.
+
+When middle adapter searching is performed, this implementation runs roughly 5x faster than the original Porechop in our hands; your mileage may vary.
 
 ```sh
 porechop-rs -i reads.fastq.gz -o trimmed.fastq.gz -t 8

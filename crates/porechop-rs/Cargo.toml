@@ -2,9 +2,11 @@
 name = "porechop-rs"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
+repository.workspace = true
 rust-version = "1.88"
 license = "GPL-3.0-or-later"
-description = "Parallel adapter trimming and barcode demultiplexing for Nanopore reads"
+description = "Adapter trimming and barcode demultiplexing for Nanopore reads (Porechop drop-in)"
 
 [dependencies]
 anyhow = "1.0.104"
