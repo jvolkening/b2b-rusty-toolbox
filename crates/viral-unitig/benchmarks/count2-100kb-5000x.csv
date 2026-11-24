@@ -1,0 +1,2 @@
+size,depth,reads,bases,mode,status,seconds,contigs,longest,reference_31mer_recall,contig_31mer_precision,matching_31mer_redundancy
+100000,5000,1004108,500000360,count2-normalized,ok,74.26,17,100001,1.0000,0.9998,1.0000

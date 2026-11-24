@@ -1,0 +1,6 @@
+size,depth,reads,bases,mode,status,seconds,contigs,longest,reference_31mer_recall,contig_31mer_precision,matching_31mer_redundancy
+600,5000,10356,3000096,sensitive,ok,2.74,84,601,1.0000,0.9532,1.0000
+600,5000,10356,3000096,normalized,ok,0.18,1,600,1.0000,1.0000,1.0000
+600,5000,10356,3000096,normalized-25,ok,0.13,1,600,1.0000,1.0000,1.0000
+600,5000,10356,3000096,count2-normalized,ok,0.25,1,601,1.0000,0.9982,1.0000
+600,5000,10356,3000096,short-k,ok,0.15,1,600,1.0000,1.0000,1.0000

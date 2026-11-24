@@ -1,9 +1,13 @@
+import csv
+import io
 import random
 import tempfile
 import unittest
 from pathlib import Path
 
+from coverage_bias import make_profile_reads, regional_recall
 from matrix import fasta, make_reads, reverse_complement, score
+from short_flye_compare import write_result
 
 
 class MatrixTest(unittest.TestCase):
@@ -29,6 +33,36 @@ class MatrixTest(unittest.TestCase):
             second = make_reads(path, reference, 5, 500, 0, random.Random(5))
             self.assertEqual(first, second)
             self.assertEqual(reads, list(fasta(path)))
+
+    def test_biased_generator_retains_the_requested_regional_contrast(self):
+        rng = random.Random(12)
+        reference = "".join(rng.choices("ACGT", k=10_000))
+        with tempfile.TemporaryDirectory() as directory:
+            reads, bases, regional = make_profile_reads(
+                Path(directory) / "reads.fa", reference, 500, 20, 200, 0,
+                random.Random(42),
+            )
+            self.assertGreater(reads, 0)
+            self.assertGreaterEqual(bases, 1_100_000)
+            self.assertGreater(min(regional), 10)
+            self.assertGreater(max(regional) / min(regional), 5)
+
+    def test_regional_recall_scores_a_complete_assembly(self):
+        rng = random.Random(12)
+        reference = "".join(rng.choices("ACGT", k=10_000))
+        self.assertEqual(regional_recall(reference, [reference], 4), [1.0] * 4)
+
+    def test_short_flye_result_reports_regional_recall(self):
+        rng = random.Random(12)
+        reference = "".join(rng.choices("ACGT", k=1_000))
+        output = io.StringIO()
+        writer = csv.writer(output)
+        write_result(
+            writer, 1, reference, 10, len(reference), "biased", "20;200",
+            "Flye", "short-ont", "ok", 1.0, [reference],
+        )
+        row = next(csv.reader(output.getvalue().splitlines()))
+        self.assertEqual(row[-1], "1.0000;1.0000")
 
 
 if __name__ == "__main__":

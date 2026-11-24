@@ -18,6 +18,7 @@ MODES = {
     "sensitive": ["--kmer", "21", "--min-count", "3", "--min-fraction", "0.4", "--normalize-depth", "0"],
     "normalized": ["--kmer", "21", "--min-count", "3", "--min-fraction", "0.4", "--normalize-depth", "50"],
     "normalized-25": ["--kmer", "21", "--min-count", "3", "--min-fraction", "0.4", "--normalize-depth", "25"],
+    "count2-normalized": ["--kmer", "21", "--min-count", "2", "--min-fraction", "0.4", "--normalize-depth", "25"],
     "normalized-15": ["--kmer", "21", "--min-count", "3", "--min-fraction", "0.4", "--normalize-depth", "15"],
     "short-k": ["--kmer", "15", "--min-count", "2", "--min-fraction", "0.4", "--normalize-depth", "50"],
     "fast": ["--kmer", "21", "--min-count", "3", "--min-fraction", "0.4", "--normalize-depth", "50", "--no-clean-errors"],

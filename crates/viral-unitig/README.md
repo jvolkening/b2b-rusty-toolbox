@@ -22,12 +22,14 @@ target/release/viral-unitig --uncertain uncertain.fa sample1.fq sample2.fq > uni
 The defaults are `k=21`, minimum count 3, minimum branch support 0.4, and
 coverage-relative error cleaning enabled. **These filters can
 discard low-coverage organisms and collapse or erase real minority strains.**
-For a less aggressive investigation, use `--min-fraction 0.2`,
-at the cost of more error-derived fragments.
-For very low-depth samples, `--kmer 15 --min-count 2` can recover more
-sequence, but shorter k-mers are less specific and may increase graph
-branching, misjoins and error-derived contigs. Neither setting guarantees
-recovery at 5x.
+For a less aggressive investigation, use `--min-fraction 0.2`; this retains
+more alternatives but can add error-derived fragments and does not guarantee
+better recall or contiguity.
+For very low-depth samples, shorter k-mers can recover more sequence, but are
+less specific and may increase graph branching, misjoins and error-derived
+contigs. In a five-seed 10x sweep, `--kmer 15 --min-count 3` gave better
+contiguity than `--kmer 15 --min-count 2`, with somewhat less recall; neither
+setting guarantees recovery at 5x.
 Only A/C/G/T participate in k-mers; IUPAC ambiguous bases break k-mers.
 Reads shorter than k are accepted but contribute no k-mers. Both strands are
 combined, and FASTQ qualities are checked for format but not used in assembly.
@@ -181,9 +183,11 @@ python3 crates/viral-unitig/benchmarks/matrix.py target/release/viral-unitig \
 These ran on a two-core Intel Xeon Platinum 8370C, with 7.5 GiB RAM and
 Rust 1.100.0. A single random sequence
 and seed per size cannot represent repeats, real nanopore systematic errors,
-coverage bias, chimeras, contamination, mixed taxa, or related strains. The
-benchmark is not a comparison with Flye or MEGAHIT. Performance and biological
-utility on real metagenomes and five million reads remain unverified.
+coverage bias, chimeras, contamination, mixed taxa, or related strains. A
+comparison with the experimental short-ONT Flye branch is now included below,
+but there is no comparison with MEGAHIT, real nanopore data, mixed-taxon truth
+sets, or five million reads. Performance and biological utility in those
+settings remain unverified.
 
 In the earlier matrix, at 5x the aggressive settings recovered no reference 31-mers
 for any size, while the normalized settings recovered 2.9% to 14.1% in
@@ -221,6 +225,165 @@ python3 crates/viral-unitig/benchmarks/matrix.py target/release/viral-unitig \
   --modes sensitive normalized-25 short-k --threads 2 --timeout 30
 # Repeat with --mean 800.
 ```
+
+## Low-depth and uneven-coverage investigations
+
+The [low-depth sweep](benchmarks/low-coverage-sweep.csv) tested k=15, 17, 19,
+and 21; minimum counts 1, 2, and 3; relative support 0.1, 0.2, and 0.4; and
+error-cleaning on/off at 5x and 10x. Five-seed results for the more promising
+settings are in [low-coverage-replicates.csv](benchmarks/low-coverage-replicates.csv).
+At 10x, k=15/min-count=3 improves the mean exact 31-mer recall and median
+longest unitig over the default k=21/min-count=3, but remains highly
+fragmented:
+
+| Genome | k=21/count=3 recall; median contigs; longest | k=15/count=3 recall; median contigs; longest |
+|---:|---:|---:|
+| 600 bp | 51.3%; 20; 110 bp | 72.4%; 10; 216 bp |
+| 3,000 bp | 45.1%; 91; 282 bp | 62.7%; 76; 498 bp |
+| 10,000 bp | 44.6%; 295; 255 bp | 60.5%; 230; 632 bp |
+
+These are five-seed means for recall and medians for contigs/longest contig.
+Minimum count 1 produced too many error-derived fragments to be useful;
+lowering relative support below 0.4 did not improve the promising settings,
+and disabling error cleanup increased false fragments without improving
+reference recall. The tested weak-bubble cleanup had no effect at 10x.
+Consequently, these experiments do not justify weakening the defaults
+globally. `k=15, min-count=3` is a candidate sensitivity profile, not a
+validated replacement.
+
+The [regional-bias benchmark](benchmarks/coverage-bias-final.csv) compares
+uniform controls with profiles having the same mean depth and a 10:1 or 20:1
+high-to-low regional depth ratio. Reads have mean length 500 bp and 5%
+independent substitution/insertion/deletion events. In the 10-kb, 10:1 case,
+the default assembler recovered 92.28% of exact reference 31-mers but emitted
+70 contigs (longest 2,926 bp), versus one 10-kb contig from the matched-mean
+uniform control. The realized regional depths were 210.4, 16.8, 20.8, and
+208.3x. At 20:1, the biased case emitted 67 contigs (longest 3,366 bp) with
+92.64% recall; the matched-mean uniform control again emitted one contig.
+In both cases the high-depth end regions had full recall, while lower-depth
+regions lost recall and contiguity. These are single-seed examples, not a
+claim that every coverage gradient fragments this way.
+
+The [threshold/cleanup sweep](benchmarks/coverage-bias-threshold-sweep.csv)
+tested whether those losses could be fixed with the existing graph filters.
+For the 10-kb 10:1 case, lowering `--min-fraction` from 0.4 to 0.2 changed
+70 contigs/92.28% recall to 78/91.98%; lowering it to 0.1 produced 319
+contigs/82.53%, and disabling relative filtering produced 7,767
+contigs/41.29%. Disabling error cleanup at 0.4 retained the same recall but
+produced 3,181 contigs and 79.21% exact 31-mer precision. The tested
+k=15/min-count=3 mode improved this case to 36 contigs, a 3,334-bp longest
+unitig, and 95.92% recall, but did not make it contiguous. Lowering the
+minimum count to 2 also increased fragmentation. The current filters are
+therefore not a remedy for strong regional depth imbalance; a locally
+adaptive error model or a read-overlap/linkage approach remains necessary.
+
+As a direct overlap-assembly comparison, the
+[short-Flye benchmark](benchmarks/short-flye-compare-5seeds.csv) used the
+`short-ont-metagenomes` branch at
+[`f9cb6d8`](https://github.com/jvolkening/Flye/commit/f9cb6d87086cc9e8f57e6208a71b9c37fdd369af).
+On the same five independent, uniform 10x read sets (mean 500 bp, 5% errors),
+that branch's short-read overlap mode emitted one contig for every 600-bp and
+3-kb case, and one contig in four of five 10-kb cases. Mean exact 31-mer recall
+was 98.94%, 99.75%, and 98.96%, respectively; median runtimes were 0.69, 0.77,
+and 1.00 seconds using two threads. In this experiment, default
+`viral-unitig` had median contig counts of 20, 91, and 295 and mean recall of
+51.33%, 45.08%, and 44.58%. These results strongly favor the overlap-based
+approach on this particular low-depth synthetic model; they do not establish
+performance on real reads or high-depth mixtures. Optional Flye end extension
+did not materially change the results.
+
+On three 100-kb, 10x replicates (about 2,000 reads each), Flye produced
+2-5 contigs, with 98.79-99.58% exact 31-mer recall, 98.58-99.50% precision,
+and 3.14-3.63-second runtimes. In contrast, the default de Bruijn settings
+produced about 3,000 fragments and 44-46% recall; k=15/count=3 improved this
+to about 2,250 fragments and 60-61% recall. See the
+[100-kb comparison](benchmarks/short-flye-100kb-10x-3seeds.csv).
+
+At 5x, Flye was also much more sensitive than the de Bruijn baseline but was
+not complete: it failed to emit contigs in one of five 600-bp runs; the other
+four had one contig and mean 84.78% recall. For 3-kb genomes it produced a
+median of two contigs and 86.09% mean recall; for 10-kb genomes, three contigs
+and 78.32% mean recall. On the same seeds, default `viral-unitig` had 9.47%,
+10.48%, and 11.29% mean recall and median contig counts of 15, 68, and 217.
+Full results are in the [5x comparison](benchmarks/short-flye-compare-5x-5seeds.csv).
+
+On three 10:1 biased-depth replicates with observed low regions of 16.7-30.4x
+and high regions of 204-220x, Flye also emitted one contig in every 3-kb and
+10-kb case. Exact 31-mer recall was 99.97% and 99.99%, respectively, with
+median runtimes of 3.0 and 4.5 seconds. On the same reads, default
+`viral-unitig` produced 2-11 contigs at 3 kb and 49-68 at 10 kb; k=15/count=3
+reduced those counts to 2-7 and 28-35 but did not make the 10-kb assemblies
+contiguous. The 600-bp profiles have substantial read-boundary smoothing, so
+their nominal 10:1 target does not produce a 10:1 realized regional depth.
+Flye still emitted one contig for each 600-bp genome, but the unextended contigs
+recovered 84-99.65% of exact reference 31-mers; `--extend-ends` made no
+material difference in these runs. See the
+[three-seed regional comparison](benchmarks/short-flye-biased-ratio10-3seeds.csv).
+Three 20:1 profiles were also tested, with observed low regions of 18.8-24.4x
+and high regions of 409-428x. Flye again produced one contig in every 3-kb and
+10-kb case, with 99.97% and 99.99% exact 31-mer recall and median runtimes of
+5.2 and 8.7 seconds. Default `viral-unitig` produced 9-16 contigs at 3 kb and
+52-80 at 10 kb; k=15/count=3 reduced these to 3-7 and 28-41. At 600 bp, Flye
+produced one 599-bp contig in all three runs (99.82% recall). Results are in
+the [20:1 regional comparison](benchmarks/short-flye-biased-ratio20-3seeds.csv).
+In this Flye branch, short mode selects a minimum overlap from read N90
+(clamped to 100-500 bp), while raw short reads use 11-mers and a 3-minimizer
+window. This overlap-based read linkage is the strongest remaining algorithmic
+avenue to pursue in Rust; lowering k-mer support thresholds alone did not
+reproduce its contiguity.
+
+The same overlap mode did not handle extreme depth: on 10,356 reads from a
+600-bp genome at 5,000x it failed to assemble any disjointigs in 15.12 seconds.
+On those same reads, unnormalized k=21/min-count=3 emitted 84 contigs, whereas
+streaming normalization at depth 25 or 50 produced one 600-bp contig with
+full exact 31-mer recall and precision in 0.13-0.18 seconds. The matching
+[normalization results](benchmarks/short-flye-600-5000x-unitig-modes.csv)
+illustrate a useful high-depth path, but are single-genome simulations:
+normalization is order-dependent and can discard real low-abundance organisms
+or variants.
+
+The sweeps can be reproduced from the repository root:
+
+```sh
+python3 crates/viral-unitig/benchmarks/low_coverage_sweep.py \
+  target/release/viral-unitig --threads 2 > low-coverage-sweep.csv
+python3 crates/viral-unitig/benchmarks/low_coverage_replicates.py \
+  target/release/viral-unitig --threads 2 > low-coverage-replicates.csv
+python3 crates/viral-unitig/benchmarks/coverage_bias.py \
+  target/release/viral-unitig --sizes 3000 10000 --means 500 \
+  --floor 20 --ratios 1 10 20 --threads 2 > coverage-bias.csv
+python3 crates/viral-unitig/benchmarks/matrix.py \
+  target/release/viral-unitig --sizes 600 --depths 5000 \
+  --modes sensitive normalized normalized-25 count2-normalized short-k \
+  --threads 2 > small-high-depth.csv
+python3 crates/viral-unitig/benchmarks/short_flye_compare.py \
+  target/release/viral-unitig /path/to/Flye/bin/flye \
+  --sizes 600 3000 10000 --seeds 20261124 20261125 20261126 20261127 20261128 \
+  --depth 10 --mean 500 --threads 2 > short-flye-compare.csv
+python3 crates/viral-unitig/benchmarks/short_flye_compare.py \
+  target/release/viral-unitig /path/to/Flye/bin/flye \
+  --sizes 600 3000 10000 --seeds 20261124 20261125 20261126 20261127 20261128 \
+  --depth 5 --mean 500 --threads 2 > short-flye-5x.csv
+python3 crates/viral-unitig/benchmarks/short_flye_compare.py \
+  target/release/viral-unitig /path/to/Flye/bin/flye \
+  --sizes 100000 --seeds 20261124 20261125 20261126 \
+  --depth 10 --mean 500 --threads 2 --skip-extend-ends \
+  > short-flye-100kb.csv
+python3 crates/viral-unitig/benchmarks/short_flye_compare.py \
+  target/release/viral-unitig /path/to/Flye/bin/flye \
+  --sizes 600 3000 10000 --seeds 20261124 20261125 20261126 \
+  --profile biased --floor 20 --ratio 10 --mean 500 --threads 2 \
+  > short-flye-biased.csv
+python3 crates/viral-unitig/benchmarks/short_flye_compare.py \
+  target/release/viral-unitig /path/to/Flye/bin/flye \
+  --sizes 600 3000 10000 --seeds 20261124 20261125 20261126 \
+  --profile biased --floor 20 --ratio 20 --mean 500 --threads 2 \
+  > short-flye-biased-20to1.csv
+```
+
+The Flye result is specific to the cited experimental branch and parameter
+set; it is a useful direction for the Rust prototype to investigate, not an
+endorsement of that branch as a production metagenomics assembler.
 
 The [mixed benchmark](benchmarks/mixed-guard200-results.csv), with reads
 ordered by genome, recovered long unitigs from an unrelated 50x genome

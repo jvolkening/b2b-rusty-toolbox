@@ -1,0 +1,6 @@
+seed,size,profile,regional_mean_coverage,reads,assembler,mode,status,seconds,contigs,total_contig_bp,longest_contig_bp,reference_31mer_recall,contig_31mer_precision,regional_31mer_recall
+20261124,600,uniform,,10356,viral-unitig,unitig-k21-count3,ok,2.79,84,2631,601,1.0000,0.9532,1.0000;1.0000
+20261124,600,uniform,,10356,viral-unitig,unitig-k21-count2,ok,10.34,892,24559,601,1.0000,0.3780,1.0000;1.0000
+20261124,600,uniform,,10356,viral-unitig,unitig-k15-count3,ok,1.91,161,3573,601,1.0000,0.9982,1.0000;1.0000
+20261124,600,uniform,,10356,viral-unitig,unitig-k15-count2,ok,5.94,1220,25483,601,1.0000,0.9179,1.0000;1.0000
+20261124,600,uniform,,10356,Flye,short-ont,exit_1,15.12,,,,,,
