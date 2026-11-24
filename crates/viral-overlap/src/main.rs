@@ -1,6 +1,8 @@
 use std::io::{self, BufWriter, Write};
 use std::path::PathBuf;
-use viral_overlap::{Options, assemble_with_stats, auto_min_overlap, parse_reads, write_fasta};
+use viral_overlap::{
+    Options, assemble_with_stats, auto_min_overlap, estimate_depths, parse_reads, write_fasta,
+};
 
 const USAGE: &str = "\
 viral-overlap - experimental overlap-based viral assembler
@@ -19,6 +21,9 @@ OPTIONS:
 Reads uncompressed or gzip-compressed FASTA/FASTQ. Outputs polished contigs
 as FASTA. This experimental prototype uses minimap2 all-vs-all overlaps,
 a greedy non-branching read layout, and read-backed majority consensus.
+FASTA headers report length (LN:i) and rounded mean depth (DP:i); depth is
+aligned read bases from primary mappings of the original reads divided by
+the full final contig length, including any uncovered positions.
 ";
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -83,9 +88,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         "normalization retained {}/{} reads",
         assembly.retained_reads, assembly.input_reads
     );
+    let depths = estimate_depths(&reads, &assembly.contigs, options.threads)?;
     let stdout = io::stdout();
     let mut writer = BufWriter::new(stdout.lock());
-    write_fasta(&assembly.contigs, &mut writer)?;
+    write_fasta(&assembly.contigs, &depths, &mut writer)?;
     writer.flush()?;
     eprintln!("contigs={}", assembly.contigs.len());
     Ok(())

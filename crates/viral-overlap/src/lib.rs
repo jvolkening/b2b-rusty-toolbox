@@ -845,13 +845,112 @@ fn reverse_complement(sequence: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-pub fn write_fasta<W: Write>(contigs: &[Vec<u8>], mut writer: W) -> io::Result<()> {
-    for (index, contig) in contigs.iter().enumerate() {
+pub fn estimate_depths(
+    reads: &[Read],
+    contigs: &[Vec<u8>],
+    threads: usize,
+) -> io::Result<Vec<u64>> {
+    if threads == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "threads must be positive",
+        ));
+    }
+    if contigs.is_empty() {
+        return Ok(Vec::new());
+    }
+    if contigs.iter().any(Vec::is_empty) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "contigs must not be empty",
+        ));
+    }
+    let contig_fasta = TempFasta::create(
+        contigs
+            .iter()
+            .enumerate()
+            .map(|(index, sequence)| (format!("c{index}"), sequence.clone())),
+    )?;
+    let mut builder = Aligner::builder().map_ont().with_cigar();
+    builder.idxopt.k = 11;
+    let aligner = builder
+        .with_index_threads(threads)
+        .with_index(&contig_fasta.0, None)
+        .map_err(|error| io::Error::other(format!("cannot index contigs for depth: {error}")))?;
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .build()
+        .map_err(|error| io::Error::other(format!("cannot create depth worker pool: {error}")))?;
+    let mappings: Vec<io::Result<Option<(usize, u64)>>> = pool.install(|| {
+        reads
+            .par_iter()
+            .map(|read| {
+                let mappings = aligner
+                    .map(&read.sequence, false, false, None, None, None)
+                    .map_err(|error| {
+                        io::Error::other(format!("read {} depth mapping failed: {error}", read.id))
+                    })?;
+                let Some(mapping) = mappings.iter().find(|mapping| mapping.is_primary) else {
+                    return Ok(None);
+                };
+                let name = mapping.target_name.as_deref().ok_or_else(|| {
+                    io::Error::other("minimap2 returned a depth mapping without a target name")
+                })?;
+                let index = name
+                    .strip_prefix('c')
+                    .and_then(|id| id.parse::<usize>().ok())
+                    .filter(|&id| id < contigs.len())
+                    .ok_or_else(|| {
+                        io::Error::other(format!("unexpected depth target name {name}"))
+                    })?;
+                let cigar = mapping
+                    .alignment
+                    .as_ref()
+                    .and_then(|alignment| alignment.cigar.as_ref())
+                    .ok_or_else(|| {
+                        io::Error::other("minimap2 returned a depth mapping without a CIGAR")
+                    })?;
+                let aligned_bases = cigar
+                    .iter()
+                    .filter(|(_, operation)| matches!(operation, 0 | 7 | 8))
+                    .map(|(length, _)| u64::from(*length))
+                    .sum();
+                Ok(Some((index, aligned_bases)))
+            })
+            .collect()
+    });
+    let mut aligned_bases = vec![0u64; contigs.len()];
+    for mapping in mappings {
+        if let Some((index, bases)) = mapping? {
+            aligned_bases[index] = aligned_bases[index]
+                .checked_add(bases)
+                .ok_or_else(|| io::Error::other("depth aligned-base count overflow"))?;
+        }
+    }
+    Ok(contigs
+        .iter()
+        .zip(aligned_bases)
+        .map(|(contig, bases)| {
+            let length = contig.len() as u64;
+            bases / length + u64::from(bases % length >= length.div_ceil(2))
+        })
+        .collect())
+}
+
+pub fn write_fasta<W: Write>(contigs: &[Vec<u8>], depths: &[u64], mut writer: W) -> io::Result<()> {
+    if contigs.len() != depths.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "contig and depth counts differ",
+        ));
+    }
+    for (index, (contig, depth)) in contigs.iter().zip(depths).enumerate() {
         writeln!(
             writer,
-            ">viral_overlap_{} length={}",
+            ">ctg_{} LN:i:{} DP:i:{}",
             index + 1,
-            contig.len()
+            contig.len(),
+            depth
         )?;
         for chunk in contig.chunks(80) {
             writer.write_all(chunk)?;
@@ -887,6 +986,82 @@ pub fn parse_reads(paths: &[PathBuf]) -> io::Result<Vec<Read>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fasta_headers_include_length_and_depth_for_each_contig() {
+        let contigs = vec![vec![b'A'; 81], b"ACGT".to_vec()];
+        let mut output = Vec::new();
+        write_fasta(&contigs, &[12, 0], &mut output).unwrap();
+        assert_eq!(
+            String::from_utf8(output).unwrap(),
+            format!(
+                ">ctg_1 LN:i:81 DP:i:12\n{}\nA\n>ctg_2 LN:i:4 DP:i:0\nACGT\n",
+                "A".repeat(80)
+            )
+        );
+        assert!(write_fasta(&contigs, &[12], Vec::new()).is_err());
+    }
+
+    #[test]
+    fn depth_counts_original_mapped_bases_across_full_contigs() {
+        let mut state = 17u64;
+        let mut sequence = || {
+            (0..800)
+                .map(|_| {
+                    state ^= state << 13;
+                    state ^= state >> 7;
+                    state ^= state << 17;
+                    b"ACGT"[(state >> 62) as usize]
+                })
+                .collect::<Vec<_>>()
+        };
+        let first = sequence();
+        let second = sequence();
+        let uncovered = sequence();
+        let reads = vec![
+            Read {
+                id: 0,
+                sequence: first.clone(),
+            },
+            Read {
+                id: 1,
+                sequence: reverse_complement(&first),
+            },
+            Read {
+                id: 2,
+                sequence: first[200..600].to_vec(),
+            },
+            Read {
+                id: 3,
+                sequence: second.clone(),
+            },
+        ];
+        assert_eq!(
+            estimate_depths(&reads, &[first, second, uncovered], 2).unwrap(),
+            vec![3, 1, 0]
+        );
+    }
+
+    #[test]
+    fn depth_uses_reads_discarded_by_normalization() {
+        let mut state = 47u64;
+        let contig: Vec<_> = (0..500)
+            .map(|_| {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                b"ACGT"[(state >> 62) as usize]
+            })
+            .collect();
+        let reads: Vec<_> = (0..120)
+            .map(|id| Read {
+                id,
+                sequence: contig.clone(),
+            })
+            .collect();
+        assert!(normalize_reads(&reads).len() < reads.len());
+        assert_eq!(estimate_depths(&reads, &[contig], 2).unwrap(), vec![120]);
+    }
 
     #[test]
     fn auto_overlap_clamps_to_flye_short_read_range() {
