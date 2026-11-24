@@ -1,0 +1,729 @@
+use std::io::Write;
+use std::process::{Command, Stdio};
+use std::time::{SystemTime, UNIX_EPOCH};
+use viral_unitig::{Assembler, AssemblyStats, Options};
+
+fn reference(len: usize) -> Vec<u8> {
+    let mut state = 0x92b7_a1e5_3f6c_8471u64;
+    (0..len)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            b"ACGT"[(state & 3) as usize]
+        })
+        .collect()
+}
+
+fn reverse_complement(sequence: &[u8]) -> Vec<u8> {
+    sequence
+        .iter()
+        .rev()
+        .map(|base| match base {
+            b'A' => b'T',
+            b'C' => b'G',
+            b'G' => b'C',
+            b'T' => b'A',
+            _ => panic!("unexpected base"),
+        })
+        .collect()
+}
+
+fn sequences(data: &[u8]) -> Vec<Vec<u8>> {
+    let mut result: Vec<Vec<u8>> = Vec::new();
+    for line in data.split(|&b| b == b'\n') {
+        if line.starts_with(b">") {
+            result.push(Vec::new());
+        } else if !line.is_empty() {
+            result.last_mut().unwrap().extend_from_slice(line);
+        }
+    }
+    result
+}
+
+fn assemble(reads: &[Vec<u8>], options: Options) -> Vec<Vec<u8>> {
+    assemble_with_stats(reads, options).0
+}
+
+fn assemble_with_stats(reads: &[Vec<u8>], options: Options) -> (Vec<Vec<u8>>, AssemblyStats) {
+    let mut assembler = Assembler::new(options).unwrap();
+    for read in reads {
+        assembler.add_read(read).unwrap();
+    }
+    let mut output = Vec::new();
+    let stats = assembler.write_unitigs(&mut output).unwrap();
+    (sequences(&output), stats)
+}
+
+fn contains_either_strand(unitigs: &[Vec<u8>], sequence: &[u8]) -> bool {
+    unitigs.iter().any(|seq| {
+        seq.windows(sequence.len()).any(|window| window == sequence)
+            || reverse_complement(seq)
+                .windows(sequence.len())
+                .any(|window| window == sequence)
+    })
+}
+
+#[test]
+fn normalization_caps_repeated_reads_but_retains_unrelated_reads() {
+    let genome = reference(1200);
+    let abundant = &genome[..400];
+    let rare = &genome[800..1200];
+    let mut assembler = Assembler::new(Options {
+        min_count: 1,
+        normalize_depth: 5,
+        clean_errors: false,
+        min_fraction: 0.0,
+        ..Options::default()
+    })
+    .unwrap();
+    for _ in 0..50 {
+        assembler.add_read(abundant).unwrap();
+    }
+    assembler.add_read(&reverse_complement(rare)).unwrap();
+    assert_eq!(assembler.reads, 51);
+    assert_eq!(assembler.normalized_reads, 45);
+    let mut output = Vec::new();
+    assembler.write_unitigs(&mut output).unwrap();
+    let unitigs = sequences(&output);
+    assert!(contains_either_strand(&unitigs, abundant));
+    assert!(contains_either_strand(&unitigs, rare));
+}
+
+#[test]
+fn normalization_does_not_skip_validation() {
+    let genome = reference(100);
+    let mut assembler = Assembler::new(Options {
+        normalize_depth: 1,
+        ..Options::default()
+    })
+    .unwrap();
+    assembler.add_read(&genome).unwrap();
+    let mut invalid = genome;
+    invalid.push(b'!');
+    assert!(assembler.add_read(&invalid).is_err());
+    assert_eq!(assembler.normalized_reads, 0);
+}
+
+#[test]
+fn normalization_can_skip_later_reads_with_a_real_alternative() {
+    let genome = reference(200);
+    let mut alternate = genome.clone();
+    alternate[100] = if alternate[100] == b'A' { b'C' } else { b'A' };
+    let mut assembler = Assembler::new(Options {
+        normalize_depth: 5,
+        ..Options::default()
+    })
+    .unwrap();
+    for _ in 0..5 {
+        assembler.add_read(&genome).unwrap();
+    }
+    assembler.add_read(&alternate).unwrap();
+    assert_eq!(assembler.normalized_reads, 1);
+}
+
+#[test]
+fn normalization_retains_reads_with_long_undercovered_extensions() {
+    let genome = reference(400);
+    let mut assembler = Assembler::new(Options {
+        normalize_depth: 5,
+        ..Options::default()
+    })
+    .unwrap();
+    for _ in 0..5 {
+        assembler.add_read(&genome[..80]).unwrap();
+    }
+    for _ in 0..5 {
+        assembler.add_read(&genome).unwrap();
+    }
+    assert_eq!(assembler.normalized_reads, 0);
+    let mut output = Vec::new();
+    assembler.write_unitigs(&mut output).unwrap();
+    assert!(contains_either_strand(&sequences(&output), &genome));
+}
+
+#[test]
+fn normalization_uses_ten_percent_of_valid_kmers() {
+    let genome = reference(100);
+    for (prefix, skipped) in [(27, 0), (28, 1)] {
+        let mut assembler = Assembler::new(Options {
+            normalize_depth: 5,
+            ..Options::default()
+        })
+        .unwrap();
+        for _ in 0..5 {
+            assembler.add_read(&genome[..prefix]).unwrap();
+        }
+        assembler.add_read(&genome).unwrap();
+        assert_eq!(assembler.normalized_reads, skipped, "prefix {prefix}");
+    }
+}
+
+#[test]
+fn normalization_keeps_a_run_of_two_hundred_undercovered_kmers() {
+    let genome = reference(250);
+    for (length, skipped) in [(249, 1), (250, 0)] {
+        let mut assembler = Assembler::new(Options {
+            normalize_depth: 5,
+            ..Options::default()
+        })
+        .unwrap();
+        for _ in 0..5 {
+            assembler.add_read(&genome[..50]).unwrap();
+        }
+        assembler.add_read(&genome[..length]).unwrap();
+        assert_eq!(assembler.normalized_reads, skipped, "length {length}");
+    }
+}
+
+#[test]
+fn cli_reports_normalized_reads() {
+    let genome = reference(100);
+    let mut child = Command::new(env!("CARGO_BIN_EXE_viral-unitig"))
+        .args(["--normalize-depth", "1", "--min-count", "1"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let input = child.stdin.as_mut().unwrap();
+        for i in 0..3 {
+            writeln!(input, ">r{i}\n{}", String::from_utf8_lossy(&genome)).unwrap();
+        }
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("2 reads skipped by normalization"));
+    assert!(contains_either_strand(&sequences(&output.stdout), &genome));
+}
+
+#[test]
+fn assembles_short_overlapping_reads_from_both_strands() {
+    let genome = reference(1400);
+    let mut reads = Vec::new();
+    for start in (0..=1200).step_by(25) {
+        for i in 0..12 {
+            let read = genome[start..start + 200].to_vec();
+            reads.push(if i % 2 == 0 {
+                read
+            } else {
+                reverse_complement(&read)
+            });
+        }
+    }
+    let output = assemble(&reads, Options::default());
+    assert_eq!(output.len(), 1);
+    assert!(output[0] == genome || output[0] == reverse_complement(&genome));
+}
+
+#[test]
+fn header_reports_mean_kmer_depth_for_uneven_read_support() {
+    let genome = reference(30);
+    let mut assembler = Assembler::new(Options::default()).unwrap();
+    for _ in 0..5 {
+        assembler.add_read(&genome).unwrap();
+        assembler.add_read(&reverse_complement(&genome)).unwrap();
+    }
+    for _ in 0..10 {
+        assembler.add_read(&genome[..21]).unwrap();
+    }
+    let mut output = Vec::new();
+    let stats = assembler.write_unitigs(&mut output).unwrap();
+    assert_eq!(stats.unitigs, 1);
+    let header = std::str::from_utf8(&output)
+        .unwrap()
+        .lines()
+        .next()
+        .unwrap();
+    assert!(header.contains("mean_kmer_depth=11.00"), "{header}");
+}
+
+#[test]
+fn retains_branches_for_two_supported_alleles() {
+    let genome = reference(400);
+    let mut variant = genome.clone();
+    variant[200] = match variant[200] {
+        b'A' => b'C',
+        _ => b'A',
+    };
+    let mut reads = vec![genome.clone(); 30];
+    reads.extend(vec![variant.clone(); 10]);
+    let output = assemble(
+        &reads,
+        Options {
+            clean_bubbles: true,
+            clean_errors: false,
+            min_fraction: 0.2,
+            ..Options::default()
+        },
+    );
+    // Branches are emitted separately, not arbitrarily resolved into one strain.
+    assert!(output.iter().any(|seq| {
+        seq.windows(21).any(|w| w == &genome[190..211])
+            || reverse_complement(seq)
+                .windows(21)
+                .any(|w| w == &genome[190..211])
+    }));
+    assert!(output.iter().any(|seq| {
+        seq.windows(21).any(|w| w == &variant[190..211])
+            || reverse_complement(seq)
+                .windows(21)
+                .any(|w| w == &variant[190..211])
+    }));
+    assert!(!output.iter().any(|seq| seq.len() == genome.len()));
+}
+
+#[test]
+fn lower_min_count_recovers_distinct_low_coverage_genome() {
+    let genome = reference(500);
+    let rare = reference(1200)[1000..1120].to_vec();
+    let mut reads = vec![genome.clone(); 100];
+    reads.extend(vec![rare.clone(); 3]);
+    let (strict_output, _) = assemble_with_stats(
+        &reads,
+        Options {
+            min_count: 10,
+            ..Options::default()
+        },
+    );
+    assert!(contains_either_strand(&strict_output, &genome));
+    assert!(!contains_either_strand(&strict_output, &rare));
+    let (output, _) = assemble_with_stats(&reads, Options::default());
+    assert!(contains_either_strand(&output, &genome));
+    assert!(contains_either_strand(&output, &rare));
+}
+
+#[test]
+fn clean_mode_keeps_well_supported_alternative_allele() {
+    let genome = reference(400);
+    let mut alternate = genome.clone();
+    alternate[200] = if alternate[200] == b'A' { b'C' } else { b'A' };
+    let mut reads = vec![genome.clone(); 100];
+    reads.extend(vec![alternate.clone(); 50]);
+    let (output, _) = assemble_with_stats(&reads, Options::default());
+    assert!(contains_either_strand(&output, &genome[190..211]));
+    assert!(contains_either_strand(&output, &alternate[190..211]));
+}
+
+#[test]
+fn lower_min_fraction_retains_a_weaker_alternative() {
+    let genome = reference(400);
+    let mut alternate = genome.clone();
+    alternate[200] = if alternate[200] == b'A' { b'C' } else { b'A' };
+    let mut reads = vec![genome; 100];
+    reads.extend(vec![alternate.clone(); 30]);
+    let default_output = assemble(&reads, Options::default());
+    let sensitive_output = assemble(
+        &reads,
+        Options {
+            min_fraction: 0.2,
+            ..Options::default()
+        },
+    );
+    assert!(!contains_either_strand(
+        &default_output,
+        &alternate[190..211]
+    ));
+    assert!(contains_either_strand(
+        &sensitive_output,
+        &alternate[190..211]
+    ));
+}
+
+#[test]
+fn saves_ambiguous_similar_fragment_when_requested() {
+    let genome = reference(500);
+    let mut short = genome[200..225].to_vec();
+    for pos in [8, 14] {
+        short[pos] = if short[pos] == b'A' { b'C' } else { b'A' };
+    }
+    let run = |threads| {
+        let mut assembler = Assembler::new(Options {
+            min_count: 3,
+            threads,
+            ..Options::default()
+        })
+        .unwrap();
+        for _ in 0..100 {
+            assembler.add_read(&genome).unwrap();
+        }
+        for _ in 0..4 {
+            assembler.add_read(&short).unwrap();
+        }
+        let mut output = Vec::new();
+        let mut uncertain = Vec::new();
+        let stats = assembler
+            .write_unitigs_with_uncertain(&mut output, Some(&mut uncertain))
+            .unwrap();
+        (output, uncertain, stats)
+    };
+    let (output, uncertain, stats) = run(1);
+    let (parallel_output, parallel_uncertain, parallel_stats) = run(4);
+    assert_eq!(output, parallel_output);
+    assert_eq!(uncertain, parallel_uncertain);
+    assert_eq!(stats, parallel_stats);
+    assert!(contains_either_strand(&sequences(&output), &genome));
+    assert!(contains_either_strand(&sequences(&uncertain), &short));
+    let uncertain_text = std::str::from_utf8(&uncertain).unwrap();
+    let matching_record = uncertain_text
+        .split('>')
+        .find(|record| contains_either_strand(&sequences(format!(">{record}").as_bytes()), &short))
+        .unwrap();
+    assert!(
+        matching_record
+            .lines()
+            .next()
+            .unwrap()
+            .contains("mean_kmer_depth=4.00")
+    );
+    assert!(stats.separated_uncertain_unitigs > 0);
+    assert_eq!(stats.discarded_uncertain_unitigs, 0);
+}
+
+#[test]
+fn cleans_weak_complete_bubble_but_preserves_unrelated_rare_sequence() {
+    let genome = reference(400);
+    let rare = reference(800)[600..720].to_vec();
+    let mut error = genome.clone();
+    error[200] = if error[200] == b'A' { b'C' } else { b'A' };
+    let mut reads = vec![genome.clone(); 100];
+    reads.extend(vec![error.clone(); 4]);
+    reads.extend(vec![rare.clone(); 3]);
+
+    let (cleaned, stats) = assemble_with_stats(
+        &reads,
+        Options {
+            clean_bubbles: true,
+            clean_errors: false,
+            min_count: 3,
+            ..Options::default()
+        },
+    );
+    assert!(stats.removed_bubble_paths > 0);
+    assert!(stats.removed_bubble_kmers > 0);
+    assert!(contains_either_strand(&cleaned, &genome));
+    assert!(contains_either_strand(&cleaned, &rare));
+    assert!(!contains_either_strand(&cleaned, &error[190..211]));
+
+    let (uncleaned, stats) = assemble_with_stats(
+        &reads,
+        Options {
+            clean_errors: false,
+            min_count: 3,
+            ..Options::default()
+        },
+    );
+    assert_eq!(stats.removed_bubble_paths, 0);
+    assert!(contains_either_strand(&uncleaned, &error[190..211]));
+    assert!(cleaned.len() < uncleaned.len());
+
+    let (unfiltered, stats) = assemble_with_stats(
+        &reads,
+        Options {
+            clean_bubbles: true,
+            clean_errors: false,
+            min_count: 3,
+            min_fraction: 0.0,
+            ..Options::default()
+        },
+    );
+    assert_eq!(stats.removed_bubble_paths, 0);
+    assert!(contains_either_strand(&unfiltered, &error[190..211]));
+}
+
+#[test]
+fn cleans_weak_single_insertion_bubble() {
+    let genome = reference(400);
+    let mut error = genome.clone();
+    error.insert(200, if genome[200] == b'A' { b'C' } else { b'A' });
+    let mut reads = vec![genome.clone(); 100];
+    reads.extend(vec![error; 4]);
+    let (output, stats) = assemble_with_stats(
+        &reads,
+        Options {
+            clean_bubbles: true,
+            clean_errors: false,
+            min_count: 3,
+            ..Options::default()
+        },
+    );
+    assert!(stats.removed_bubble_paths > 0);
+    assert!(contains_either_strand(&output, &genome));
+}
+
+#[test]
+fn does_not_clean_a_dissimilar_weak_bubble() {
+    let genome = reference(400);
+    let mut alternate = genome.clone();
+    for base in &mut alternate[200..203] {
+        *base = match *base {
+            b'A' => b'C',
+            b'C' => b'G',
+            b'G' => b'T',
+            _ => b'A',
+        };
+    }
+    let mut reads = vec![genome; 100];
+    reads.extend(vec![alternate.clone(); 4]);
+    let (output, stats) = assemble_with_stats(
+        &reads,
+        Options {
+            clean_bubbles: true,
+            clean_errors: false,
+            min_count: 3,
+            ..Options::default()
+        },
+    );
+    assert_eq!(stats.removed_bubble_paths, 0);
+    assert!(contains_either_strand(&output, &alternate[195..216]));
+}
+
+#[test]
+fn circular_unitig_is_marked_and_contains_its_overlap() {
+    let genome = reference(200);
+    let mut wrapped = genome.clone();
+    wrapped.extend_from_slice(&genome[..20]);
+    let mut assembler = Assembler::new(Options::default()).unwrap();
+    for _ in 0..10 {
+        assembler.add_read(&wrapped).unwrap();
+    }
+    let mut output = Vec::new();
+    assembler.write_unitigs(&mut output).unwrap();
+    let text = String::from_utf8_lossy(&output);
+    assert!(text.contains("circular=true"));
+    assert!(text.contains("mean_kmer_depth=10.00"));
+    let seqs = sequences(&output);
+    assert_eq!(seqs.len(), 1);
+    assert_eq!(seqs[0].len(), genome.len() + 20);
+    assert_eq!(&seqs[0][..20], &seqs[0][genome.len()..]);
+    let mut doubled = genome.clone();
+    doubled.extend_from_slice(&genome);
+    assert!(
+        doubled
+            .windows(genome.len())
+            .any(|w| w == &seqs[0][..genome.len()])
+            || reverse_complement(&doubled)
+                .windows(genome.len())
+                .any(|w| w == &seqs[0][..genome.len()])
+    );
+}
+
+#[test]
+fn filters_substitution_errors_at_high_coverage() {
+    let genome = reference(600);
+    let mut reads = Vec::new();
+    for i in 0..500 {
+        let mut read = genome.clone();
+        let position = (i * 43) % genome.len();
+        read[position] = match read[position] {
+            b'A' => b'C',
+            _ => b'A',
+        };
+        reads.push(read);
+    }
+    let output = assemble(&reads, Options::default());
+    assert!(
+        output
+            .iter()
+            .any(|seq| *seq == genome || *seq == reverse_complement(&genome))
+    );
+}
+
+#[test]
+fn assembles_noisy_short_reads_at_high_depth() {
+    let genome = reference(1200);
+    let mut state = 0xc018_75bd_4aa6_3517u64;
+    let mut random = || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    let mut reads = Vec::new();
+    for _ in 0..6000 {
+        let start = (random() as usize) % (genome.len() - 200 + 1);
+        let mut read = Vec::new();
+        for &original_base in &genome[start..start + 200] {
+            let event = random() % 200;
+            if event == 0 {
+                continue;
+            }
+            if event == 1 {
+                read.push(b"ACGT"[(random() % 4) as usize]);
+            }
+            let mut base = original_base;
+            if random() % 100 < 1 {
+                let offset = 1 + (random() % 3) as usize;
+                let original = b"ACGT".iter().position(|b| *b == base).unwrap();
+                base = b"ACGT"[(original + offset) % 4];
+            }
+            read.push(base);
+        }
+        reads.push(read);
+    }
+    let assemble_with_threads = |threads| {
+        let mut assembler = Assembler::new(Options {
+            threads,
+            ..Options::default()
+        })
+        .unwrap();
+        for read in &reads {
+            assembler.add_read(read).unwrap();
+        }
+        let mut primary = Vec::new();
+        let mut uncertain = Vec::new();
+        let stats = assembler
+            .write_unitigs_with_uncertain(&mut primary, Some(&mut uncertain))
+            .unwrap();
+        (primary, uncertain, stats)
+    };
+    let single = assemble_with_threads(1);
+    let parallel = assemble_with_threads(4);
+    assert_eq!(single, parallel);
+    assert!(single.2.removed_error_kmers > 0);
+    let output = sequences(&single.0);
+    assert_eq!(output.len(), 1, "unitigs: {}", output.len());
+    let longest_exact = output
+        .iter()
+        .filter(|seq| {
+            let reverse = reverse_complement(seq);
+            genome.windows(seq.len()).any(|w| w == *seq)
+                || genome.windows(seq.len()).any(|w| w == reverse)
+        })
+        .map(Vec::len)
+        .max()
+        .unwrap_or(0);
+    assert!(
+        longest_exact >= 1000,
+        "longest exact unitig: {longest_exact}"
+    );
+}
+
+#[test]
+fn cli_rejects_zero_threads() {
+    let output = Command::new(env!("CARGO_BIN_EXE_viral-unitig"))
+        .args(["--threads", "0"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("threads must be positive"));
+}
+
+#[test]
+fn ambiguous_bases_break_paths_and_short_reads_are_accepted() {
+    let mut sequence = reference(120);
+    sequence[60] = b'N';
+    let mut reads = vec![sequence; 10];
+    reads.push(b"ACGT".to_vec());
+    let output = assemble(&reads, Options::default());
+    assert_eq!(output.len(), 2);
+    assert_eq!(output.iter().map(Vec::len).sum::<usize>(), 119);
+}
+
+#[test]
+fn validates_wrapped_fastq_and_fails_on_truncation() {
+    let mut assembler = Assembler::new(Options::default()).unwrap();
+    assembler
+        .read_fastx(&b"@r\nACGTACGTAC\nGTACGTACGT\n+\nIIIIIIIIII\nIIIIIIIIII\n"[..])
+        .unwrap();
+    assert_eq!(assembler.reads, 1);
+    assert!(assembler.read_fastx(&b"@r\nACGT\n+\nIII\n"[..]).is_err());
+    assert!(assembler.read_fastx(&b"@r\nACGT\n+\nIIIII\n"[..]).is_err());
+    assert!(assembler.read_fastx(&b">r\nACGT?\n"[..]).is_err());
+}
+
+#[test]
+fn distinct_kmer_limit_fails_instead_of_dropping_data() {
+    let mut assembler = Assembler::new(Options {
+        max_kmers: 1,
+        ..Options::default()
+    })
+    .unwrap();
+    assert!(
+        assembler
+            .add_read(&reference(100))
+            .unwrap_err()
+            .to_string()
+            .contains("limit")
+    );
+}
+
+#[test]
+fn cli_reports_bad_input_without_emitting_fasta() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_viral-unitig"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"@read\nACGT\n+\nII\n")
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("truncated FASTQ quality"));
+}
+
+#[test]
+fn cli_refuses_to_overwrite_uncertain_output() {
+    let existing = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_viral-unitig"))
+        .args(["--uncertain", existing])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b">read\nACGTACGTACGTACGTACGTACGT\n")
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
+fn cli_writes_uncertain_fragments_separately() {
+    let genome = reference(500);
+    let mut short = genome[200..225].to_vec();
+    for pos in [8, 14] {
+        short[pos] = if short[pos] == b'A' { b'C' } else { b'A' };
+    }
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let path =
+        std::env::temp_dir().join(format!("viral-unitig-{}-{unique}.fa", std::process::id()));
+    let mut child = Command::new(env!("CARGO_BIN_EXE_viral-unitig"))
+        .arg("--uncertain")
+        .arg(&path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = Vec::new();
+    for sequence in std::iter::repeat_n(&genome, 100).chain(std::iter::repeat_n(&short, 10)) {
+        input.extend_from_slice(b">read\n");
+        input.extend_from_slice(sequence);
+        input.push(b'\n');
+    }
+    child.stdin.take().unwrap().write_all(&input).unwrap();
+    let result = child.wait_with_output().unwrap();
+    let uncertain = std::fs::read(&path).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    assert!(result.status.success());
+    assert!(contains_either_strand(&sequences(&result.stdout), &genome));
+    assert!(contains_either_strand(&sequences(&uncertain), &short));
+    assert!(String::from_utf8_lossy(&result.stdout).contains("mean_kmer_depth=100.00"));
+    assert!(String::from_utf8_lossy(&uncertain).contains("mean_kmer_depth=10.00"));
+}
