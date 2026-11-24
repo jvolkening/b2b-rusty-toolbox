@@ -14,7 +14,7 @@ Use '-' once to include stdin among input files.
 
 OPTIONS:
     -k, --kmer <ODD>         k-mer size, 15 to 31 [default: 21]
-    --min-count <N>          Minimum k-mer occurrences [default: 10]
+    --min-count <N>          Minimum k-mer occurrences [default: 3]
     --min-fraction <F>       Minimum local branch support, 0 <= F < 1 [default: 0.4]
     --clean-bubbles          Experimentally remove weak, similar bubble paths
     --no-clean-errors        Disable experimental near-neighbor error filtering
@@ -22,6 +22,7 @@ OPTIONS:
     --uncertain <FILE>       Save short, possibly redundant unitigs separately
     --min-length <N>         Minimum emitted unitig length [default: k]
     --max-kmers <N>          Maximum distinct input k-mers [default: 10000000]
+    --normalize-depth <N>    Experimental read normalization threshold [default: 0, disabled]
     -t, --threads <N>        Worker threads [default: available CPUs, up to 8]
     -h, --help               Print help
 
@@ -44,7 +45,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             "--clean-errors" => options.clean_errors = true,
             "--no-clean-errors" => options.clean_errors = false,
             "-k" | "--kmer" | "--min-count" | "--min-fraction" | "--min-length" | "--max-kmers"
-            | "-t" | "--threads" | "--uncertain" => {
+            | "-t" | "--threads" | "--uncertain" | "--normalize-depth" => {
                 let value = args
                     .next()
                     .ok_or_else(|| format!("{arg} requires a value"))?;
@@ -54,6 +55,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     "--min-fraction" => options.min_fraction = value.parse()?,
                     "--min-length" => options.min_length = value.parse()?,
                     "--max-kmers" => options.max_kmers = value.parse()?,
+                    "--normalize-depth" => options.normalize_depth = value.parse()?,
                     "-t" | "--threads" => options.threads = value.parse()?,
                     "--uncertain" => {
                         if uncertain_path.replace(value).is_some() {
@@ -89,7 +91,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             .map_err(|err| io::Error::new(err.kind(), format!("{name}: {err}")))?;
     }
     let stdout = io::stdout();
-    let (reads, bases) = (assembler.reads, assembler.bases);
+    let (reads, bases, normalized_reads) =
+        (assembler.reads, assembler.bases, assembler.normalized_reads);
     let mut uncertain = uncertain_path
         .map(|path| {
             File::create_new(&path)
@@ -102,9 +105,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         uncertain.as_mut().map(|file| file as &mut dyn io::Write),
     )?;
     eprintln!(
-        "processed {} reads, {} bases; wrote {} unitigs; removed {} error k-mers and {} weak bubble paths ({} k-mers); separated {} uncertain unitigs",
+        "processed {} reads, {} bases ({} reads skipped by normalization); wrote {} unitigs; removed {} error k-mers and {} weak bubble paths ({} k-mers); separated {} uncertain unitigs",
         reads,
         bases,
+        normalized_reads,
         stats.unitigs,
         stats.removed_error_kmers,
         stats.removed_bubble_paths,

@@ -65,6 +65,140 @@ fn contains_either_strand(unitigs: &[Vec<u8>], sequence: &[u8]) -> bool {
 }
 
 #[test]
+fn normalization_caps_repeated_reads_but_retains_unrelated_reads() {
+    let genome = reference(1200);
+    let abundant = &genome[..400];
+    let rare = &genome[800..1200];
+    let mut assembler = Assembler::new(Options {
+        min_count: 1,
+        normalize_depth: 5,
+        clean_errors: false,
+        min_fraction: 0.0,
+        ..Options::default()
+    })
+    .unwrap();
+    for _ in 0..50 {
+        assembler.add_read(abundant).unwrap();
+    }
+    assembler.add_read(&reverse_complement(rare)).unwrap();
+    assert_eq!(assembler.reads, 51);
+    assert_eq!(assembler.normalized_reads, 45);
+    let mut output = Vec::new();
+    assembler.write_unitigs(&mut output).unwrap();
+    let unitigs = sequences(&output);
+    assert!(contains_either_strand(&unitigs, abundant));
+    assert!(contains_either_strand(&unitigs, rare));
+}
+
+#[test]
+fn normalization_does_not_skip_validation() {
+    let genome = reference(100);
+    let mut assembler = Assembler::new(Options {
+        normalize_depth: 1,
+        ..Options::default()
+    })
+    .unwrap();
+    assembler.add_read(&genome).unwrap();
+    let mut invalid = genome;
+    invalid.push(b'!');
+    assert!(assembler.add_read(&invalid).is_err());
+    assert_eq!(assembler.normalized_reads, 0);
+}
+
+#[test]
+fn normalization_can_skip_later_reads_with_a_real_alternative() {
+    let genome = reference(200);
+    let mut alternate = genome.clone();
+    alternate[100] = if alternate[100] == b'A' { b'C' } else { b'A' };
+    let mut assembler = Assembler::new(Options {
+        normalize_depth: 5,
+        ..Options::default()
+    })
+    .unwrap();
+    for _ in 0..5 {
+        assembler.add_read(&genome).unwrap();
+    }
+    assembler.add_read(&alternate).unwrap();
+    assert_eq!(assembler.normalized_reads, 1);
+}
+
+#[test]
+fn normalization_retains_reads_with_long_undercovered_extensions() {
+    let genome = reference(400);
+    let mut assembler = Assembler::new(Options {
+        normalize_depth: 5,
+        ..Options::default()
+    })
+    .unwrap();
+    for _ in 0..5 {
+        assembler.add_read(&genome[..80]).unwrap();
+    }
+    for _ in 0..5 {
+        assembler.add_read(&genome).unwrap();
+    }
+    assert_eq!(assembler.normalized_reads, 0);
+    let mut output = Vec::new();
+    assembler.write_unitigs(&mut output).unwrap();
+    assert!(contains_either_strand(&sequences(&output), &genome));
+}
+
+#[test]
+fn normalization_uses_ten_percent_of_valid_kmers() {
+    let genome = reference(100);
+    for (prefix, skipped) in [(27, 0), (28, 1)] {
+        let mut assembler = Assembler::new(Options {
+            normalize_depth: 5,
+            ..Options::default()
+        })
+        .unwrap();
+        for _ in 0..5 {
+            assembler.add_read(&genome[..prefix]).unwrap();
+        }
+        assembler.add_read(&genome).unwrap();
+        assert_eq!(assembler.normalized_reads, skipped, "prefix {prefix}");
+    }
+}
+
+#[test]
+fn normalization_keeps_a_run_of_two_hundred_undercovered_kmers() {
+    let genome = reference(250);
+    for (length, skipped) in [(249, 1), (250, 0)] {
+        let mut assembler = Assembler::new(Options {
+            normalize_depth: 5,
+            ..Options::default()
+        })
+        .unwrap();
+        for _ in 0..5 {
+            assembler.add_read(&genome[..50]).unwrap();
+        }
+        assembler.add_read(&genome[..length]).unwrap();
+        assert_eq!(assembler.normalized_reads, skipped, "length {length}");
+    }
+}
+
+#[test]
+fn cli_reports_normalized_reads() {
+    let genome = reference(100);
+    let mut child = Command::new(env!("CARGO_BIN_EXE_viral-unitig"))
+        .args(["--normalize-depth", "1", "--min-count", "1"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let input = child.stdin.as_mut().unwrap();
+        for i in 0..3 {
+            writeln!(input, ">r{i}\n{}", String::from_utf8_lossy(&genome)).unwrap();
+        }
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("2 reads skipped by normalization"));
+    assert!(contains_either_strand(&sequences(&output.stdout), &genome));
+}
+
+#[test]
 fn assembles_short_overlapping_reads_from_both_strands() {
     let genome = reference(1400);
     let mut reads = Vec::new();
@@ -146,16 +280,16 @@ fn lower_min_count_recovers_distinct_low_coverage_genome() {
     let rare = reference(1200)[1000..1120].to_vec();
     let mut reads = vec![genome.clone(); 100];
     reads.extend(vec![rare.clone(); 3]);
-    let (default_output, _) = assemble_with_stats(&reads, Options::default());
-    assert!(contains_either_strand(&default_output, &genome));
-    assert!(!contains_either_strand(&default_output, &rare));
-    let (output, _) = assemble_with_stats(
+    let (strict_output, _) = assemble_with_stats(
         &reads,
         Options {
-            min_count: 3,
+            min_count: 10,
             ..Options::default()
         },
     );
+    assert!(contains_either_strand(&strict_output, &genome));
+    assert!(!contains_either_strand(&strict_output, &rare));
+    let (output, _) = assemble_with_stats(&reads, Options::default());
     assert!(contains_either_strand(&output, &genome));
     assert!(contains_either_strand(&output, &rare));
 }

@@ -11,6 +11,7 @@ pub struct Options {
     pub min_length: usize,
     pub max_kmers: usize,
     pub threads: usize,
+    pub normalize_depth: u32,
     pub clean_bubbles: bool,
     pub clean_errors: bool,
 }
@@ -19,10 +20,11 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             k: 21,
-            min_count: 10,
+            min_count: 3,
             min_fraction: 0.4,
             min_length: 0,
             max_kmers: 10_000_000,
+            normalize_depth: 0,
             threads: std::thread::available_parallelism()
                 .map_or(1, usize::from)
                 .min(8),
@@ -69,6 +71,7 @@ pub struct Assembler {
     pool: rayon::ThreadPool,
     pub reads: u64,
     pub bases: u64,
+    pub normalized_reads: u64,
 }
 
 fn invalid(message: impl Into<String>) -> io::Error {
@@ -202,6 +205,7 @@ impl Assembler {
             pool,
             reads: 0,
             bases: 0,
+            normalized_reads: 0,
         })
     }
 
@@ -212,6 +216,7 @@ impl Assembler {
         let k = self.options.k;
         let mask = (1u64 << (2 * k)) - 1;
         let (mut forward, mut reverse, mut run) = (0u64, 0u64, 0usize);
+        let mut words = Vec::with_capacity(sequence.len().saturating_sub(k - 1));
         for &base in sequence {
             let value = match base.to_ascii_uppercase() {
                 b'A' => 0u64,
@@ -230,28 +235,51 @@ impl Assembler {
             reverse = (reverse >> 2) | ((3 - value) << (2 * (k - 1)));
             run += 1;
             if run >= k {
-                let at_limit = self.edges.len() >= self.options.max_kmers;
-                match self.edges.entry(forward.min(reverse)) {
-                    Entry::Occupied(mut entry) => {
-                        entry.get_mut().count = entry.get().count.saturating_add(1);
-                    }
-                    Entry::Vacant(entry) => {
-                        if at_limit {
-                            return Err(invalid(format!(
-                                "distinct k-mer limit ({}) exceeded; increase --max-kmers if memory permits",
-                                self.options.max_kmers
-                            )));
-                        }
-                        entry.insert(Edge {
-                            count: 1,
-                            visited: false,
-                        });
-                    }
-                }
+                words.push(forward.min(reverse));
             }
         }
         self.reads = self.reads.saturating_add(1);
         self.bases = self.bases.saturating_add(sequence.len() as u64);
+        if self.options.normalize_depth > 0 && !words.is_empty() {
+            let (mut supported, mut gap, mut longest_gap) = (0, 0, 0);
+            for word in &words {
+                if self
+                    .edges
+                    .get(word)
+                    .is_some_and(|edge| edge.count >= self.options.normalize_depth)
+                {
+                    supported += 1;
+                    gap = 0;
+                } else {
+                    gap += 1;
+                    longest_gap = longest_gap.max(gap);
+                }
+            }
+            if supported * 10 >= words.len() && longest_gap < 200 {
+                self.normalized_reads = self.normalized_reads.saturating_add(1);
+                return Ok(());
+            }
+        }
+        for word in words {
+            let at_limit = self.edges.len() >= self.options.max_kmers;
+            match self.edges.entry(word) {
+                Entry::Occupied(mut entry) => {
+                    entry.get_mut().count = entry.get().count.saturating_add(1);
+                }
+                Entry::Vacant(entry) => {
+                    if at_limit {
+                        return Err(invalid(format!(
+                            "distinct k-mer limit ({}) exceeded; increase --max-kmers if memory permits",
+                            self.options.max_kmers
+                        )));
+                    }
+                    entry.insert(Edge {
+                        count: 1,
+                        visited: false,
+                    });
+                }
+            }
+        }
         Ok(())
     }
 

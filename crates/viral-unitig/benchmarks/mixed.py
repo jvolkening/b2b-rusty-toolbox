@@ -9,8 +9,10 @@ import tempfile
 
 
 def main():
-    if len(sys.argv) != 2:
-        sys.exit("usage: python3 mixed.py /path/to/viral-unitig")
+    if len(sys.argv) < 2:
+        sys.exit("usage: python3 mixed.py /path/to/viral-unitig [assembler options]")
+    if "--uncertain" in sys.argv[2:]:
+        sys.exit("the benchmark manages --uncertain itself")
     rng = random.Random(9204)
     complement = str.maketrans("ACGT", "TGCA")
     first = "".join(rng.choices("ACGT", k=1000))
@@ -47,7 +49,7 @@ def main():
         with tempfile.TemporaryDirectory() as directory:
             uncertain = Path(directory) / "uncertain.fa"
             result = subprocess.run(
-                [sys.argv[1], "--uncertain", str(uncertain)], input=input_data,
+                [sys.argv[1], *sys.argv[2:], "--uncertain", str(uncertain)], input=input_data,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
             )
             sequences = [
